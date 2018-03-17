@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if test -n "$1"
+then
+    cidx=$1
+    midx=`printf "%02d" $1`
+    idx=".$midx"
+else
+    cidx=0
+    midx=00
+    idx=
+fi
+
+id=freebsd-pear-11$idx
+name=vm-${id}
+size=32G
+cpu=$cidx
+mac=58:9c:fc:ea:00:$midx
+iso=FreeBSD-11.1-RELEASE-amd64-bootonly.iso
+disk=.diskdev-${id}
+cdev=$cidx
+
+. ./my-vmctl-preset-subr
+run_simple_freebsd_preset $*

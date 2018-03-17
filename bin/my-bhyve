@@ -1,0 +1,351 @@
+#!/bin/sh
+
+usage() {
+    echo "`basename $0` [options]"
+}
+
+
+_abspath() {
+    if echo $1 | grep -q '^/'
+    then
+        echo $1
+    else
+        echo "`pwd`/$1"
+    fi
+}
+
+
+_do_it() {
+    local _answer
+    if /bin/test -z "$batch"
+    then
+        read -p "Running $* ... [yes/no/batch] " _answer
+    else
+        _answer=yes
+    fi
+    if test -n "$DEBUG"
+    then
+        logger "Running $*"
+    fi
+    case "${_answer}" in
+        yes)
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        batch)
+            batch=1
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        *)
+            /bin/echo "skipped ..."
+        ;;
+    esac
+}
+
+if test -n "$DEBUG"
+then
+    set -x
+fi
+
+batch=1
+dryrun=
+consdev=stdio
+memsz=4G
+
+mcpu=0
+mcpu_opt=
+pinnedcpu_opt=
+basic_pci_opt=
+net_opt=
+disk_opt=
+cdrom_opt=
+
+load_disk=
+busid=0
+passthrough_opt=
+extra_opt=
+grub_devmap=
+grubdev=
+grubdir=/boot/grub
+grubconf=
+nobhyveload=
+
+basic_pci_opt="-s ${busid}:0,hostbridge"
+busid=$(( busid + 1 ))
+
+args=`getopt ABc:C:d:D:E:g:G:hiI:l:L:M:nN:p:P: $*`
+if test $? -ne 0
+then
+    exit 1
+fi
+set -- $args
+while true
+do
+    case "$1" in
+        -A)
+            shift
+            extra_opt="$extra_opt -A"
+        ;;
+
+        -B)
+            shift
+            nobhyveload=yes
+        ;;
+
+        -c)
+            shift
+            consdev=$1
+            shift
+        ;;
+
+        -C)
+            shift
+            d="`_abspath $1`"
+            cdrom_opt="-s ${busid}:0,ahci-cd,$d"
+            busid=$(( busid + 1 ))
+            if test -z "$load_disk"
+            then
+                load_disk="$d"
+            fi
+            shift
+        ;;
+
+        -d)
+            shift
+            d="`_abspath $1`"
+            #disk_opt="-s ${busid}:0,virtio-blk,$d"
+            disk_opt="-s ${busid}:0,ahci-hd,$d"
+            busid=$(( busid + 1 ))
+            if test -z "$load_disk"
+            then
+                load_disk="$d"
+            fi
+            shift
+        ;;
+
+        -D)
+            shift
+            grubdev=$1
+            shift
+        ;;
+
+        -E)
+            shift
+            extra_opt="$extra_opt -s ${busid}:0,$1"
+            busid=$(( busid + 1 ))
+            shift
+        ;;
+
+        -g)
+            shift
+            d="`_abspath $1`"
+            grubdir=$d
+            shift
+        ;;
+
+        -G)
+            shift
+            d="`_abspath $1`"
+            grubconf=$d
+            shift
+        ;;
+
+        -h)
+            usage
+            break
+        ;;
+
+        -i)
+            shift
+            batch=
+        ;;
+
+        -I)
+            shift
+            d="`_abspath $1`"
+            if echo $grubdev | grep -q hd
+            then
+                #install_opt="-s ${busid}:0,virtio-blk,$d"
+                install_opt="-s ${busid}:0,ahci-hd,$d"
+            else
+                install_opt="-s ${busid}:0,ahci-cd,$d"
+            fi
+            busid=$(( busid + 1 ))
+            load_disk="$d"
+            shift
+        ;;
+
+        -l)
+            shift
+            extra_opt="$extra_opt -l $1"
+            shift
+        ;;
+
+        -L)
+            shift
+            d="`_abspath $1`"
+            grub_devmap=$d
+            shift
+        ;;
+
+        -M)
+            shift
+            mcpu_opt=$1
+            shift
+        ;;
+
+        -n)
+            shift
+            dryrun=1
+        ;;
+
+        -N)
+            shift
+            net_opt="-s ${busid}:0,virtio-net,$1"
+            busid=$(( busid + 1 ))
+            shift
+        ;;
+
+        -p)
+            shift
+            passthrough_opt="$passthrough_opt -s ${busid},passthru,$1"
+            busid=$(( busid + 1 ))
+            shift
+        ;;
+
+        -P)
+            shift
+            pinnedcpu_opt="$pinnedcpu_opt -p $1"
+            mcpu=$(( mcpu + 1 ))
+            shift
+        ;;
+
+        --)
+            shift
+            break
+        ;;
+
+    esac
+done
+
+if test -n "$mcpu_opt" -a -n "$pinnedcpu_opt"
+then
+    echo "Cannot accept both -M and -P"
+    exit 1
+fi
+mcpu=$mcpu_opt
+
+name=$1
+
+basic_pci_opt="$basic_pci_opt -s ${busid}:0,lpc"
+busid=$(( busid + 1 ))
+cons_opt="-l com1,$consdev"
+
+if test -n "$mcpu_opt" -a -n "$pinnedcpu_opt"
+then
+    echo "Cannot accept both -M and -P"
+    exit 1
+fi
+
+if test -z "$pinnedcpu_opt"
+then
+    if test "$mcpu" -eq 0
+    then
+        ncpu=`sysctl -n hw.ncpu`
+        mcpu=4
+        i=0
+        j=$(( ncpu - mcpu ))
+        while test $i -lt $mcpu
+        do
+            pinnedcpu_opt="$pinnedcpu_opt -p $i:$j"
+            i=$(( i + 1 ))
+            j=$(( j + 1 ))
+        done
+    fi
+fi
+
+if test -z "$load_disk"
+then
+    echo "load disk cannot be empty"
+    exit 1
+fi
+
+if test -z "$name"
+then
+    echo "Name cannot be empty"
+    exit 1
+fi
+
+if test -n "$DEBUG"
+then
+    set -x
+fi
+
+if test -d /var/tmp
+then
+    cd /var/tmp
+fi
+
+while true
+do
+    _do_it "bhyvectl --vm=$name --destroy"
+
+    if test -z $grub_devmap
+    then
+        if test -z "$nobhyveload"
+        then
+            _do_it "bhyveload -c $consdev -m $memsz -d $load_disk $name"
+        fi
+    else
+        memsz=4096
+        if which -s grub-bhyve
+        then
+            if test -n "$grubconf" -a -f "$grubconf"
+            then
+                _do_it "cat $grubconf | grub-bhyve -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
+            else
+                _do_it "grub-bhyve -v -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
+            fi
+        else
+            echo "Failed ro find grub-bhyve"
+            exit 1
+        fi
+    fi
+
+    if test $? -ne 0
+    then
+        echo "Failed to load $name"
+        exit 1
+    fi
+
+    _do_it "bhyve -H -P $pinnedcpu_opt \
+        -c $mcpu \
+        -m $memsz \
+        $basic_pci_opt \
+        $net_opt \
+        $disk_opt \
+        $cdrom_opt \
+        $install_opt \
+        $passthrough_opt \
+        $extra_opt \
+        $cons_opt \
+        $name"
+
+    _exitcode=$?
+    echo "bhyve returned with $_exitcode"
+    if test $_exitcode -ne 0
+    then
+        break
+    else
+        sleep 1
+    fi
+done

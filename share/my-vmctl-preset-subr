@@ -1,0 +1,114 @@
+newvol () {
+    local _vol _name _size
+    _name=$1
+    _size=$2
+    if test -n "$_my_vm_ctl_ddev_zfs"
+    then
+        _vol=skyrta/$_name
+        zfs destroy $_vol
+        zfs create -V $_size $_vol
+        _vol=/dev/zvol/$_vol
+    else
+        _vol=$_name
+        rm -f $_vol && truncate -s $_size $_vol
+    fi
+    echo $_vol
+}
+
+getvol () {
+    local _vol _name
+    _name=$1
+    if test -n "$_my_vm_ctl_ddev_zfs"
+    then
+        _vol=/dev/zvol/skyrta/$_name
+    else
+        _vol=$_name
+    fi
+    echo $_vol
+}
+
+run_simple_linux_preset () {
+    local cmd g ddev
+    my-vmctl destroy $name
+    if test "$1" = "install"
+    then
+        cmd=install-linux
+        ddev=`newvol $disk $size`
+        #rm -f $disk && truncate -s $size $disk
+        if test -n "$grubi"
+        then
+            g="-G $grubi"
+        else
+            g=
+        fi
+        d=$devmapi
+    else
+        cmd=run-linux
+        ddev=`getvol $disk`
+        if test -n "$grubr"
+        then
+            g="-G $grubr"
+        else
+            g=
+        fi
+        d=$devmapr
+        iso=
+    fi
+
+    #my-vmctl -P0:$cpu $cmd $g $d $iso $ddev $mac $name $cdev
+    my-vmctl -M1 $cmd $g $d $iso $ddev $mac $name $cdev
+}
+
+run_simple_freebsd_preset () {
+    local cmd g ddev
+    my-vmctl destroy $name
+    if test "$1" = "install"
+    then
+        cmd=install
+        ddev=`newvol $disk $size`
+        #rm -f $disk && truncate -s $size $disk
+    else
+        cmd=run
+        ddev=`getvol $disk`
+        iso=
+    fi
+
+    #my-vmctl -P0:$cpu $cmd $iso $ddev $mac $name $cdev
+    my-vmctl -M1 $cmd $iso $ddev $mac $name $cdev
+}
+
+run_simple_windows_preset () {
+    local cmd g ddev
+    my-vmctl destroy $name
+    if test "$1" = "install"
+    then
+        cmd=install-windows
+        ddev=`newvol $disk $size`
+        #rm -f $disk && truncate -s $size $disk
+    else
+        cmd=run-windows
+        ddev=`newvol $disk $size`
+        if test -z "$fakeiso"
+        then
+            fakeiso=.fakeiso-$name
+        fi
+        :> $fakeiso
+        iso=$fakeiso
+    fi
+
+    export DEBUG=yes
+
+    #my-vmctl -P0:$cpu $cmd $bootrom $iso $ddev $mac $name 
+    my-vmctl -M1 $cmd $bootrom $iso $ddev $mac $name 
+}
+
+#
+if zpool list >/dev/null 2>&1
+then
+    if test -z "$MY_VMCTL_DDEV_UFS"
+    then
+        _my_vm_ctl_ddev_zfs=1
+    fi
+fi
+export _my_vm_ctl_ddev_zfs
+

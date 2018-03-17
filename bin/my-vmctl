@@ -1,0 +1,927 @@
+#!/bin/sh
+
+usage() {
+    echo "Usage:"
+    echo "[ DEBUG=1 ] `basename $0` [ -i ]"
+    echo "    setup [altroot]"
+    echo "    teardown [altroot]"
+    echo "    start-iface"
+    echo "    stop-iface"
+    echo "    install distro disk mac vmname"
+    echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk mac vmname"
+    echo "    install-windows bootrom distro disk mac vmname"
+    echo "    run disk mac vmname"
+    echo "    list"
+    echo "    poweroff vmname"
+    echo "    destroy vmanme"
+    echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk mac vmname"
+    echo "    run-windows bootrom disk mac vmname"
+    echo "    check"
+    echo "    connect"
+    echo
+    echo " special commands (require altroot setup/teardown):"
+    echo "    mountalt"
+    echo "    linkalt"
+    echo "    runalt"
+    echo "    destroyalt"
+    echo "    umountalt"
+    echo "    poweroffalt"
+    echo
+}
+
+
+_abspath() {
+    if echo $1 | grep -q '^/'
+    then
+        echo $1
+    else
+        echo "`pwd`/$1"
+    fi
+}
+
+
+_do_it() {
+    local _answer
+    if /bin/test -z "$batch"
+    then
+        read -p "Running $* ... [yes/no/batch] " _answer
+    else
+        _answer=yes
+    fi
+    if test -n "$DEBUG"
+    then
+        logger "Running $*"
+    fi
+    case "${_answer}" in
+        yes)
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        batch)
+            batch=1
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        *)
+            /bin/echo "skipped ..."
+        ;;
+    esac
+}
+
+
+standard_labels="root swap var tmp work usr data"
+nonshared_mounts="/ /dev /var /tmp /work /usr"
+shared_mounts="/data0 /data1"
+
+
+set -e
+if test -n "$DEBUG"
+then
+    set -x
+fi
+
+
+_is_mounted() {
+    if mount -p | awk '{print $2;}' | grep -q "^${1}$"
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+_rootdev() {
+    n=$1
+    if test -z "$n"
+    then
+        n=altroot
+    fi
+    mount -p | awk '{print $1, $2;}' | grep "/$n\$" | awk '{print $1;}'
+}
+
+
+_checkfstat() {
+    local n
+    n=$1
+    if test -z "$n"
+    then
+        n=altroot
+    fi
+    mount -p | awk '{print $2;}' | grep -E "/$n(/|\$)" >/tmp/altroots
+    if fstat | grep -f /tmp/altroots
+    then
+        rm /tmp/altroots
+        return 1
+    else
+        rm /tmp/altroots
+        return 0
+    fi
+}
+
+
+_start_ifaces() {
+    local i _tap
+    for i in if_tap vmm nmdm
+    do
+        if ! kldstat -q -m $i
+        then
+            kldload $i
+        fi
+    done
+    sysctl net.link.tap.user_open=1
+    sysctl net.link.tap.up_on_open=1
+    #if ! ifconfig -l | grep -E -q 'bridge0'
+    #then
+    #    ifconfig bridge0 create
+    #    ifconfig bridge0 inet 10.1.2.10 netmask 255.255.255.0
+    #    ifconfig bridge0 up
+    #fi
+    for i in 0 1 2 3 4 5 6
+    do
+        _tap=`ifconfig tap create`
+        ifconfig bridge0 addm ${_tap}
+    done
+}
+
+
+_stop_ifaces() {
+    local i _all_ifaces
+    _all_ifaces="`ifconfig -l`"
+
+    for i in ${_all_ifaces}
+    do
+        if echo $i | egrep -q 'tap[0-9]+'
+        then
+            ifconfig $i down
+            ifconfig $i destroy
+        fi
+    done
+
+    #if echo ${_all_ifaces} | egrep -q 'bridge0'
+    #then
+    #    ifconfig bridge0 down
+    #    ifconfig bridge0 destroy
+    #fi
+    sysctl net.link.tap.user_open=0
+    sysctl net.link.tap.up_on_open=0
+
+    for i in if_tap nmdm #vmm
+    do
+        if kldstat -q -m $i
+        then
+            kldunload $i
+        fi
+    done
+}
+
+
+_new_tap() {
+    local _tap
+    _tap=`ifconfig tap create`
+    ifconfig bridge0 addm ${_tap}
+    ifconfig ${_tap} up
+    chmod 0660 /dev/${_tap}
+    echo ${_tap}
+}
+
+
+_pick_tap() {
+    local _taps
+    _taps="`ifconfig -l -d`"
+    for i in ${_taps}
+    do
+        if echo $i | egrep -q 'tap[0-9]+'
+        then
+            echo $i
+            break
+        fi
+    done
+}
+
+
+_destroy_tap() {
+    local _tap
+    _tap=$1
+    ifconfig ${_tap} down
+    ifconfig bridge0 deletem ${_tap}
+    ifconfig ${_tap} destroy
+}
+
+
+_install() {
+    local _disk _distro _vmname _answer _tap _mac
+
+    _distro=$1
+    _disk=$2
+    _mac=$3
+    _vmname=$4
+    if test -z "${_distro}"
+    then
+        echo "distro needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    mybhyve_opts="$mybhyve_opts -A"
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        _tap=`_pick_tap`
+        #_tap=`_new_tap`
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
+        #_destroy_tap ${_tap}
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_install_linux() {
+    local _grubdev _grubconf grubdir _devmap _disk _mac _distro _vmname _answer _tap
+
+    _grubdev=$1
+    _grubdir=$2
+    _grubconf=$3
+    _devmap=$4
+    _distro=$5
+    _disk=$6
+    _mac=$7
+    _vmname=$8
+    if test -z "${_devmap}"
+    then
+        echo "devmap needed"
+        exit 1
+    fi
+    if test -z "${_distro}"
+    then
+        echo "distro needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    echo "grubdev: ${_grubdev}"
+    echo "grubconf: ${_grubconf}"
+    echo "devmap: ${_devmap}"
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        if test -n "${_grubconf}"
+        then
+            mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
+        fi
+        _tap=`_pick_tap`
+        #_tap=`_new_tap`
+        _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
+        #_destroy_tap ${_tap}
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_install_windows() {
+    local _bootrom _distro _disk _mac _fbuf _vmname _answer _tap
+
+    _bootrom=$1
+    _distro=$2
+    _disk=$3
+    _mac=$4
+    _fbuf=$5
+    _vmname=$6
+    if test -z "${_bootrom}"
+    then
+        echo "bootrom needed"
+        exit 1
+    fi
+    if test -z "${_distro}"
+    then
+        echo "distro needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    mybhyve_opts="${mybhyve_opts} -B -E xhci,tablet -c /dev/nmdm0A -l com2,/dev/nmdm1A"
+    mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
+    mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
+
+    echo "bootrom: ${_bootrom}"
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        _tap=`_pick_tap`
+        _do_it "my-bhyve $mybhyve_opts -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run() {
+    local _disk _tap _mac _vmname _answer
+
+    _disk=$1
+    _mac=$2
+    _vmname=$3
+    _cdevnum=$4
+    if ! ifconfig -l | grep -E -q 'bridge0'
+    then
+        echo "interfaces are not set up"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    if test -n "${_cdevnum}"
+    then
+        cdev="/dev/nmdm${_cdevnum}A"
+        mybhyve_opts="$mybhyve_opts -c $cdev"
+        echo "console: $cdev"
+    fi
+    mybhyve_opts="$mybhyve_opts -A"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        _tap=`_pick_tap`
+        #_tap=`_new_tap`
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
+        #_destroy_tap ${_tap}
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_linux() {
+    local _grubconf _disk _tap _mac _vmname _answer
+
+    _grubconf=$1
+    _devmap=$2
+    _disk=$3
+    _mac=$4
+    _vmname=$5
+    _cdevnum=$6
+    if ! ifconfig -l | grep -E -q 'bridge0'
+    then
+        echo "interfaces are not st up"
+        exit 1
+    fi
+    if test -z "${_devmap}"
+    then
+        echo "devmap needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    if test -n "${_cdevnum}"
+    then
+        cdev="/dev/nmdm${_cdevnum}A"
+        mybhyve_opts="$mybhyve_opts -c $cdev"
+        echo "console: $cdev"
+    fi
+    echo "grubconf: ${_grubconf}"
+    echo "devmap: ${_devmap}"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        if test -n "${_grubconf}"
+        then
+            mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
+        fi
+        _tap=`_pick_tap`
+        #_tap=`_new_tap`
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} -d ${_disk} ${_vmname}"
+        #_destroy_tap ${_tap}
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_windows() {
+    local _bootrom _distro _disk _tap _mac _fbuf _vmname _answer
+
+    _bootrom=$1
+    _distro=$2
+    _disk=$3
+    _mac=$4
+    _fbuf=$5
+    _vmname=$6
+    if ! ifconfig -l | grep -E -q 'bridge0'
+    then
+        echo "interfaces are not st up"
+        exit 1
+    fi
+    if test -z "${_bootrom}"
+    then
+        echo "bootrom needed"
+        exit 1
+    fi
+    if test -z "${_distro}"
+    then
+        echo "distro needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    mybhyve_opts="${mybhyve_opts} -B -E xhci,tablet -c /dev/nmdm0A -l com2,/dev/nmdm1A"
+    mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
+    mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
+
+    echo "bootrom: ${_bootrom}"
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        _tap=`_pick_tap`
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_runalt() {
+    local rootmount bootdev _tap
+
+    dev=$1
+    _mac=$2
+
+    if ! ifconfig -l | grep -E -q 'bridge0'
+    then
+        echo "interfaces are not st up"
+        exit 1
+    fi
+    if mount -p | awk '{print $2;}' | grep -q altroot
+    then
+        echo "Please umount all altroot systems"
+        exit 1
+    fi
+    if test -z "$dev"
+    then
+        rootmount="`mount -p | awk '{print $1, $2;}' | grep '/$' | awk '{print $1;}'`"
+        if test -z "$rootmount"
+        then
+            echo "Something wrong with the root mount"
+            exit 1
+        fi
+        if test "$rootmount" = "/dev/gpt/root-wd1000"
+        then
+            # we are wd1000, so boot from wd1001
+            bootdev=/dev/ada1
+        elif test "$rootmount" = "/dev/gpt/root-wd1001"
+        then
+            # we are wd1001, so boot from wd1000
+            bootdev=/dev/ada0
+        else
+            echo "Failed to find altroot mount device"
+            exit 1
+        fi
+    else
+        bootdev=$dev
+    fi
+    mybhyve_opts="$mybhyve_opts -A -M4"
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
+    _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d $bootdev altroot"
+    #_destroy_tap ${_tap}
+}
+
+_destroy() {
+    _do_it "bhyvectl --vm=$1 --destroy"
+    return 0
+}
+
+_umountalt() {
+
+    if ! _checkfstat
+    then
+        echo
+        echo "Some mounts on altdev are still open. Please first kill processes listed above."
+        exit 1
+    fi
+
+    altrootnum=`_rootdev | sed 's|.*/root||'`
+
+    for i in `mount -p | awk '{print $2;}' | grep -E '/altroot(/|$)'`;
+    do
+        umount -f $i
+    done;
+
+    # Special treatment
+    umount -f /dev/gpt/data${altrootnum}
+    swapoff /dev/gpt/swap${altrootnum}
+}
+
+_mountalt() {
+    for i in $nonshared_mounts
+    do
+        if ! _is_mounted /altroot$i
+        then
+            mount /altroot$i
+        fi
+    done
+    for i in $shared_mounts
+    do
+        if ! _is_mounted $i
+        then
+            mount $i
+        fi
+    done
+    altrootnum=`_rootdev | sed 's|.*/root||'`
+    swapon /dev/gpt/swap${altrootnum}
+}
+
+_linkalt() {
+    local _arg altrootdev
+
+    _arg=$1
+    altrootdev="`_rootdev`"
+    if test -z "$altrootdev"
+    then
+        echo "Something wrong with the /altroot mount. You might want to run $0 mountalt"
+        exit 1
+    fi
+    if test "${_arg}" = "vm"
+    then
+        rm -f /altroot/etc/rc.conf
+        ln -s rc.conf.vtnet0 /altroot/etc/rc.conf
+        #sed -e 's/^\(ttyu0.*\)\(off\)\(.*\)$/\1on\3/' -i '.bak' /altroot/etc/ttys
+
+    elif test "${_arg}" = "host"
+    then
+        rm -f /altroot/etc/rc.conf
+        ln -s rc.conf.host /altroot/etc/rc.conf
+        #sed -e 's/^\(ttyu0.*\)\(on\)\(.*\)$/\1off\3/' -i '.bak' /altroot/etc/ttys
+    else
+        echo "linkalt can be one of vm, host"
+        exit 1
+    fi
+}
+
+batch=1
+dryrun=
+mybhyve_opts=
+args=`getopt E:iM:nP: $*`
+if test $? -ne 0
+then
+    exit 1
+fi
+set -- $args
+while true
+do
+    case "$1" in
+        -E)
+            shift
+            mybhyve_opts="$mybhyve_opts -E $1"
+            shift
+        ;;
+
+        -i)
+            shift
+            batch=
+            mybhyve_opts="$mybhyve_opts -i"
+        ;;
+
+        -M)
+            shift
+            mybhyve_opts="$mybhyve_opts -M $1"
+            shift
+        ;;
+
+        -n)
+            shift
+            dryrun=1
+            mybhyve_opts="$mybhyve_opts -n"
+        ;;
+
+        -P)
+            shift
+            mybhyve_opts="$mybhyve_opts -P $1"
+            shift
+        ;;
+
+        --)
+            shift
+            break
+        ;;
+
+    esac
+done
+
+
+if test "$1" = "start-iface"
+then
+    _start_ifaces
+
+elif test "$1" = "stop-iface"
+then
+    _stop_ifaces
+
+elif test "$1" = "install"
+then
+    _install $2 $3 $4 $5
+
+elif test "$1" = "install-linux"
+then
+    shift
+    grubdev=cd0
+    grubdir=/boot/grub
+    grubconf=
+    args=`getopt D:g:G:`
+    if test $? -ne 0
+    then
+        exit 1
+    fi
+    while true
+    do
+        case "$1" in
+            -D)
+                shift
+                grubdev=$1
+                shift
+            ;;
+
+            -g)
+                shift
+                grubdir=$1
+                shift
+            ;;
+
+            -G)
+                shift
+                grubconf=$1
+                shift
+            ;;
+
+            *)
+                break
+            ;;
+        esac
+    done
+    _install_linux $grubdev $grubdir "$grubconf" $1 $2 $3 $4 $5
+
+elif test "$1" = "install-windows"
+then
+    _install_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $6
+
+elif test "$1" = "run"
+then
+    _run $2 $3 $4 $5
+
+elif test "$1" = "list"
+then
+    pgrep -lf bhyve: | awk '{print $3;}'
+
+elif test "$1" = "poweroff"
+then
+    if test -n "$2" && ls /dev/vmm | grep -q "$2"
+    then
+        echo "Powering off $2 ..."
+        bhyvectl --vm=$2 --force-poweroff
+    else
+        echo "No such vm: $2"
+        exit 1
+    fi
+
+elif test "$1" = "destroy"
+then
+    _destroy $2
+
+elif test "$1" = "run-linux"
+then
+    shift
+    grubdev=cd0
+    grubdir=/boot/grub
+    grubconf=
+    args=`getopt D:g:G:`
+    if test $? -ne 0
+    then
+        exit 1
+    fi
+    while true
+    do
+        case "$1" in
+            -D)
+                shift
+                grubdev=$1
+                shift
+            ;;
+
+            -g)
+                shift
+                grubdir=$1
+                shift
+            ;;
+
+            -G)
+                shift
+                grubconf=$1
+                shift
+            ;;
+
+            *)
+                break
+            ;;
+        esac
+    done
+    _run_linux "$grubconf" $1 $2 $3 $4 $5
+
+elif test "$1" = "run-windows"
+then
+    _run_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $6
+
+elif test "$1" = "runalt"
+then
+    _runalt "" 58:9c:fc:00:00:96
+
+elif test "$1" = "poweroffalt"
+then
+    bhyvectl --vm=altroot --force-poweroff
+
+elif test "$1" = "resetalt"
+then
+    bhyvectl --vm=altroot --force-reset
+
+elif test "$1" = "destroyalt"
+then
+    _destroy altroot
+
+elif test "$1" = "umountalt"
+then
+    _umountalt
+
+elif test "$1" = "mountalt"
+then
+    _mountalt
+
+elif test "$1" = "linkalt"
+then
+    _linkalt $2
+
+elif test "$1" = "setup"
+then
+    # linkalt vm
+    # umountalt
+    # start
+    if test "$2" = "altroot"
+    then
+        _linkalt vm && _umountalt && _start_ifaces
+    else
+        _start_ifaces
+    fi
+
+elif test "$1" = "teardown"
+then
+    # destroyalt
+    # stop
+    # mountalt
+    # linkalt host
+    if test -d /dev/vmm
+    then
+        for i in `ls /dev/vmm`
+        do
+            _destroy $i
+        done
+    fi
+    _stop_ifaces
+    if test "$2" == "altroot"
+    then
+        _mountalt && _linkalt host
+    fi
+
+elif test "$1" = "check"
+then
+    if _checkfstat $2
+    then
+        echo "No open mounts on altdev"
+    else
+        echo
+        echo "Some open mounts on altdev"
+    fi
+
+elif test "$1" = "connect"
+then
+    if test -z "$2"
+    then
+        cdev="/dev/nmdm0B"
+    else
+        cdev="/dev/nmdm${2}B"
+    fi
+    if test -e $cdev
+    then
+        echo "Connecting to $cdev ..."
+        cu -l $cdev -t
+    else
+        echo "Could not find console $cdev"
+        exit 1
+    fi
+
+else
+    usage
+fi
