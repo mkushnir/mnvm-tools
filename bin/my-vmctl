@@ -145,7 +145,7 @@ _start_ifaces() {
     #    ifconfig bridge0 inet 10.1.2.10 netmask 255.255.255.0
     #    ifconfig bridge0 up
     #fi
-    for i in 0 1 2 3 4 5 6
+    for i in 0 1 2 3 4 5 6 7 8 9
     do
         _tap=`ifconfig tap create`
         ifconfig bridge0 addm ${_tap}
@@ -244,15 +244,16 @@ _install() {
         exit 1
     fi
     mybhyve_opts="$mybhyve_opts -A"
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -296,11 +297,14 @@ _install_linux() {
         echo "${_vmname} is in use"
         exit 1
     fi
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "grubdev: ${_grubdev}"
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
@@ -310,8 +314,6 @@ _install_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -358,16 +360,17 @@ _install_windows() {
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
     mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
+    _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "fbuf: ${_fbuf}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
         _do_it "my-bhyve $mybhyve_opts -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
@@ -409,14 +412,15 @@ _run() {
         echo "console: $cdev"
     fi
     mybhyve_opts="$mybhyve_opts -A"
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -464,9 +468,12 @@ _run_linux() {
         mybhyve_opts="$mybhyve_opts -c $cdev"
         echo "console: $cdev"
     fi
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
@@ -476,8 +483,6 @@ _run_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -529,16 +534,17 @@ _run_windows() {
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
     mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
+    _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "fbuf: ${_fbuf}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
     else
         echo "Exiting ..."

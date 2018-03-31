@@ -1,8 +1,22 @@
+#!/bin/sh
+
+R=/skyrta/vm
+D=/dev/zvol/skyrta
+
+if zpool list >/dev/null 2>&1
+then
+    if test -z "$MY_VMCTL_DDEV_UFS"
+    then
+        _zfs=1
+    fi
+fi
+#export _zfs
+
 newvol () {
     local _vol _name _size
     _name=$1
     _size=$2
-    if test -n "$_my_vm_ctl_ddev_zfs"
+    if test -n "$_zfs"
     then
         _vol=skyrta/$_name
         zfs destroy $_vol
@@ -18,7 +32,7 @@ newvol () {
 getvol () {
     local _vol _name
     _name=$1
-    if test -n "$_my_vm_ctl_ddev_zfs"
+    if test -n "$_zfs"
     then
         _vol=/dev/zvol/skyrta/$_name
     else
@@ -28,66 +42,79 @@ getvol () {
 }
 
 run_simple_linux_preset () {
-    local cmd g ddev
+    local _cmd _d _g _ddev _devmapi _devmapr
+
     my-vmctl destroy $name
+
+    _devmapi=device.map-${id}.install
+    _devmapr=device.map-${id}.run
+
+    cat > device.map-${id}.install <<EOD
+(cd0) $R/${iso}
+(hd0) $D/${disk}
+EOD
+
+    cat > device.map-${id}.run <<EOD
+(cd0) /fake
+(hd0) $D/${disk}
+EOD
+
+
     if test "$1" = "install"
     then
-        cmd=install-linux
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install-linux
+        _ddev=`newvol $disk $size`
         if test -n "$grubi"
         then
-            g="-G $grubi"
+            _g="-G $grubi"
         else
-            g=
+            _g=
         fi
-        d=$devmapi
+        _d=$_devmapi
     else
-        cmd=run-linux
-        ddev=`getvol $disk`
+        _cmd=run-linux
+        _ddev=`getvol $disk`
         if test -n "$grubr"
         then
-            g="-G $grubr"
+            _g="-G $grubr"
         else
-            g=
+            _g=
         fi
-        d=$devmapr
+        _d=$_devmapr
         iso=
     fi
 
-    #my-vmctl -P0:$cpu $cmd $g $d $iso $ddev $mac $name $cdev
-    my-vmctl -M1 $cmd $g $d $iso $ddev $mac $name $cdev
+    #my-vmctl -P0:$cpu $_cmd $_g $_d $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $_cmd $_g $_d $iso $_ddev $mac $name $cdev
 }
 
 run_simple_freebsd_preset () {
-    local cmd g ddev
+    local _cmd _ddev
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        cmd=install
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install
+        _ddev=`newvol $disk $size`
     else
-        cmd=run
-        ddev=`getvol $disk`
+        _cmd=run
+        _ddev=`getvol $disk`
         iso=
     fi
 
-    #my-vmctl -P0:$cpu $cmd $iso $ddev $mac $name $cdev
-    my-vmctl -M1 $cmd $iso $ddev $mac $name $cdev
+    #my-vmctl -P0:$cpu $_cmd $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $_cmd $iso $_ddev $mac $name $cdev
 }
 
 run_simple_windows_preset () {
-    local cmd g ddev
+    local _cmd _ddev
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        cmd=install-windows
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install-windows
+        _ddev=`newvol $disk $size`
     else
-        cmd=run-windows
-        ddev=`newvol $disk $size`
+        _cmd=run-windows
+        _ddev=`newvol $disk $size`
         if test -z "$fakeiso"
         then
             fakeiso=.fakeiso-$name
@@ -98,17 +125,15 @@ run_simple_windows_preset () {
 
     export DEBUG=yes
 
-    #my-vmctl -P0:$cpu $cmd $bootrom $iso $ddev $mac $name 
-    my-vmctl -M1 $cmd $bootrom $iso $ddev $mac $name 
+    #my-vmctl -P0:$cpu $_cmd $bootrom $iso $_ddev $mac $name 
+    my-vmctl -M1 $_cmd $bootrom $iso $_ddev $mac $name 
 }
 
-#
-if zpool list >/dev/null 2>&1
-then
-    if test -z "$MY_VMCTL_DDEV_UFS"
-    then
-        _my_vm_ctl_ddev_zfs=1
-    fi
-fi
-export _my_vm_ctl_ddev_zfs
-
+cdev="$idx"
+midx=`printf "%02x" $idx`
+id=${tag}.${midx}
+name=vm-${id}
+size=32G
+cpu=$idx
+mac=58:9c:fc:ea:00:$midx
+disk=.diskdev-${id}
