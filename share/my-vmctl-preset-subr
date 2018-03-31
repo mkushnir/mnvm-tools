@@ -1,15 +1,26 @@
+#!/bin/sh
+
+required () {
+    set -e
+    for i in $*
+    do
+        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+    done
+    set +e
+}
+
+
 newvol () {
-    local _vol _name _size
+    local _dataset _vol _name _size
     _name=$1
     _size=$2
-    if test -n "$_my_vm_ctl_ddev_zfs"
+    _vol=$D/$_name
+    if test -n "$_zfs"
     then
-        _vol=skyrta/$_name
-        zfs destroy $_vol
-        zfs create -V $_size $_vol
-        _vol=/dev/zvol/$_vol
+        _dataset=$P/$_name
+        zfs destroy $_dataset
+        zfs create -V $_size $_dataset
     else
-        _vol=$_name
         rm -f $_vol && truncate -s $_size $_vol
     fi
     echo $_vol
@@ -18,76 +29,99 @@ newvol () {
 getvol () {
     local _vol _name
     _name=$1
-    if test -n "$_my_vm_ctl_ddev_zfs"
-    then
-        _vol=/dev/zvol/skyrta/$_name
-    else
-        _vol=$_name
-    fi
+    _vol=$D/$_name
     echo $_vol
 }
 
+getdataset () {
+    local _dataset _name
+    _name=$1
+    _dataset=$P/$_name
+    echo $_dataset
+}
+
 run_simple_linux_preset () {
-    local cmd g ddev
+    local _cmd _d _g _ddev _devmapi _devmapr
+
+    required idx tag
+
     my-vmctl destroy $name
+
+    _devmapi=device.map-${id}.install
+    _devmapr=device.map-${id}.run
+
+    cat > device.map-${id}.install <<EOD
+(cd0) $R/${iso}
+(hd0) $D/${disk}
+EOD
+
+    cat > device.map-${id}.run <<EOD
+(cd0) /fake
+(hd0) $D/${disk}
+EOD
+
+
     if test "$1" = "install"
     then
-        cmd=install-linux
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install-linux
+        _ddev=`newvol $disk $size`
         if test -n "$grubi"
         then
-            g="-G $grubi"
+            _g="-G $grubi"
         else
-            g=
+            _g=
         fi
-        d=$devmapi
+        _d=$_devmapi
     else
-        cmd=run-linux
-        ddev=`getvol $disk`
+        _cmd=run-linux
+        _ddev=`getvol $disk`
         if test -n "$grubr"
         then
-            g="-G $grubr"
+            _g="-G $grubr"
         else
-            g=
+            _g=
         fi
-        d=$devmapr
+        _d=$_devmapr
         iso=
     fi
 
-    #my-vmctl -P0:$cpu $cmd $g $d $iso $ddev $mac $name $cdev
-    my-vmctl -M1 $cmd $g $d $iso $ddev $mac $name $cdev
+    #my-vmctl -P0:$cpu $_cmd $_g $_d $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $_cmd $_g $_d $iso $_ddev $mac $name $cdev
 }
 
 run_simple_freebsd_preset () {
-    local cmd g ddev
+    local _cmd _ddev
+
+    required idx tag
+
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        cmd=install
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install
+        _ddev=`newvol $disk $size`
     else
-        cmd=run
-        ddev=`getvol $disk`
+        _cmd=run
+        _ddev=`getvol $disk`
         iso=
     fi
 
-    #my-vmctl -P0:$cpu $cmd $iso $ddev $mac $name $cdev
-    my-vmctl -M1 $cmd $iso $ddev $mac $name $cdev
+    #my-vmctl -P0:$cpu $_cmd $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $_cmd $iso $_ddev $mac $name $cdev
 }
 
 run_simple_windows_preset () {
-    local cmd g ddev
+    local _cmd _ddev
+
+    required idx tag
+
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        cmd=install-windows
-        ddev=`newvol $disk $size`
-        #rm -f $disk && truncate -s $size $disk
+        _cmd=install-windows
+        _ddev=`newvol $disk $size`
     else
-        cmd=run-windows
-        ddev=`newvol $disk $size`
+        _cmd=run-windows
+        _ddev=`newvol $disk $size`
         if test -z "$fakeiso"
         then
             fakeiso=.fakeiso-$name
@@ -98,17 +132,118 @@ run_simple_windows_preset () {
 
     export DEBUG=yes
 
-    #my-vmctl -P0:$cpu $cmd $bootrom $iso $ddev $mac $name 
-    my-vmctl -M1 $cmd $bootrom $iso $ddev $mac $name 
+    #my-vmctl -P0:$cpu $_cmd $bootrom $iso $_ddev $mac $name 
+    my-vmctl -M1 $_cmd $bootrom $iso $_ddev $mac $name 
 }
 
-#
+
+clone_zfs_dataset () {
+    local _ddevbase _ddev _rootvol _hostname _ip4
+
+    required idx tag mnvm_node_id
+
+    _ddevbase=`getdataset $diskbase`
+    _ddev=`getdataset $disk`
+
+    if ! zfs list "${_ddevbase}" >/dev/null 2>&1
+    then
+        echo "Invalid snapshot ${_ddevbase}"
+        exit 1
+    fi
+    if zfs list "${_ddev}" >/dev/null 2>&1
+    then
+        if test -z "$force"
+        then
+            echo "Already exists ${_ddev}. Set force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+            exit 1
+        else
+            zfs destroy ${_ddev}
+        fi
+    fi
+    zfs clone ${_ddevbase} ${_ddev}
+}
+
+
+configure_freebsd () {
+    local _vol _rootvol
+
+    required disk mnvm_node_id
+
+    _vol=`getvol $disk`
+    _rootvol="${_vol}s1a"
+    if test -c ${_rootvol}
+    then
+        mount $_rootvol /mnt
+        sed -E -e "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" -i.bak /mnt/etc/rc.conf
+        umount /mnt
+    fi
+}
+
+
+configure_linux_ubuntu () {
+    local _passwd
+    required mnvm_node_id cdev
+
+    stty -echo
+    read -p "Password: " _passwd
+    stty echo
+    sed -e \
+        "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" \
+        -e "s/^__secure__:password$/__secure__:$_passwd/" \
+            <my-vmctl-preset-config-ubuntu \
+            > .my-vmctl-preset-config-ubuntu-tmp
+    my-vmctl send-script $cdev .my-vmctl-preset-config-ubuntu-tmp
+    rm .my-vmctl-preset-config-ubuntu-tmp
+}
+
+
+clone_freebsd_preset () {
+    set -e
+    clone_zfs_dataset
+    configure_freebsd
+}
+
+
+clone_linux_preset () {
+    set -e
+    clone_zfs_dataset
+}
+
+
+# main
+
+_zfs=
+# pool: for zfs hosting
+P=
+# root dir: for ISO images
+R=
+# dev dir: for disk devices
+D=
 if zpool list >/dev/null 2>&1
 then
     if test -z "$MY_VMCTL_DDEV_UFS"
     then
-        _my_vm_ctl_ddev_zfs=1
+        _zfs=1
+        # my pear. hosting
+        P=skyrta
+        R=/$P/vm
+        D=/dev/zvol/$P
+    else
+        R="`pwd`"
+        D="`pwd`"
     fi
 fi
-export _my_vm_ctl_ddev_zfs
 
+# Required variables:
+#   idx, ordinal number
+#   tag, base/template image name like ubuntu-pear-16 or freebsd-pear-11
+cdev="$idx"
+midx=`printf "%02x" $idx`
+idbase=${idbase:-${tag}@base}
+id=${tag}.${midx}
+name=vm-${id}
+size=32G
+cpu=$idx
+mac=58:9c:fc:ea:00:$midx
+disk=.diskdev-${id}
+diskbase=.diskdev-${idbase}

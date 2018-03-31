@@ -1,0 +1,40 @@
+# pear-ubuntu 16
+mkushnir
+__secure__:password
+#uname -a
+#id
+sudo -E bash
+__secure__:password
+#id
+ifname="`dmesg | grep -Eo 'enp[^:]+'`"
+mnvm_node_id=
+ip4=10.1.3.${mnvm_node_id}
+ip4mask=255.255.255.0
+ip4net=10.1.3.0
+ip4bcast=10.1.3.255
+ip4gway=10.1.3.10
+ip4ns=10.1.1.10
+hostname=vm-pear-${mnvm_node_id}
+if test -n "$ifname"
+then
+    echo $ifname
+    cd /etc/network/
+    :>interfaces.tmp
+    printf "source /etc/network/interfaces.d/*\\\\n" >>interfaces.tmp
+    printf "auto lo\\\\n" >>interfaces.tmp
+    printf "iface lo inet loopback\\\\n" >>interfaces.tmp
+    printf "auto $ifname\\\\n" >>interfaces.tmp
+    printf "iface $ifname inet static\\\\n" >>interfaces.tmp
+    printf "  address $ip4\\\\n" >>interfaces.tmp
+    printf "  netmask $ip4mask\\\\n" >>interfaces.tmp
+    printf "  network $ip4net\\\\n" >>interfaces.tmp
+    printf "  brodcast $ip4bcast\\\\n" >>interfaces.tmp
+    printf "  gateway $ip4gway\\\\n" >>interfaces.tmp
+    printf "  dns-nameservers $ip4ns\\\\n" >>interfaces.tmp
+    mv interfaces interfaces.bak
+    mv interfaces.tmp interfaces
+    echo $hostname >/etc/hostname
+    /sbin/shutdown -r now
+fi
+exit
+exit

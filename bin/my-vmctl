@@ -12,12 +12,15 @@ usage() {
     echo "    install-windows bootrom distro disk mac vmname"
     echo "    run disk mac vmname"
     echo "    list"
+    echo "    list-images"
     echo "    poweroff vmname"
     echo "    destroy vmanme"
+    echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk mac vmname"
     echo "    run-windows bootrom disk mac vmname"
     echo "    check"
     echo "    connect"
+    echo "    send-script script"
     echo
     echo " special commands (require altroot setup/teardown):"
     echo "    mountalt"
@@ -77,18 +80,6 @@ _do_it() {
 }
 
 
-standard_labels="root swap var tmp work usr data"
-nonshared_mounts="/ /dev /var /tmp /work /usr"
-shared_mounts="/data0 /data1"
-
-
-set -e
-if test -n "$DEBUG"
-then
-    set -x
-fi
-
-
 _is_mounted() {
     if mount -p | awk '{print $2;}' | grep -q "^${1}$"
     then
@@ -145,7 +136,7 @@ _start_ifaces() {
     #    ifconfig bridge0 inet 10.1.2.10 netmask 255.255.255.0
     #    ifconfig bridge0 up
     #fi
-    for i in 0 1 2 3 4 5 6
+    for i in 0 1 2 3 4 5 6 7 8 9
     do
         _tap=`ifconfig tap create`
         ifconfig bridge0 addm ${_tap}
@@ -244,15 +235,16 @@ _install() {
         exit 1
     fi
     mybhyve_opts="$mybhyve_opts -A"
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -296,11 +288,14 @@ _install_linux() {
         echo "${_vmname} is in use"
         exit 1
     fi
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "grubdev: ${_grubdev}"
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
@@ -310,8 +305,6 @@ _install_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -358,16 +351,17 @@ _install_windows() {
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
     mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
+    _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "fbuf: ${_fbuf}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
         _do_it "my-bhyve $mybhyve_opts -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
@@ -409,14 +403,15 @@ _run() {
         echo "console: $cdev"
     fi
     mybhyve_opts="$mybhyve_opts -A"
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -464,9 +459,12 @@ _run_linux() {
         mybhyve_opts="$mybhyve_opts -c $cdev"
         echo "console: $cdev"
     fi
+    _tap=`_pick_tap`
+    #_tap=`_new_tap`
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
@@ -476,8 +474,6 @@ _run_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _tap=`_pick_tap`
-        #_tap=`_new_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} -d ${_disk} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -529,16 +525,17 @@ _run_windows() {
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
     mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
+    _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
     echo "mac: ${_mac}"
     echo "fbuf: ${_fbuf}"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _tap=`_pick_tap`
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
     else
         echo "Exiting ..."
@@ -592,13 +589,21 @@ _runalt() {
     #_destroy_tap ${_tap}
 }
 
+
 _destroy() {
     _do_it "bhyvectl --vm=$1 --destroy"
     return 0
 }
 
-_umountalt() {
 
+_destroy_image() {
+    batch=
+    _do_it "zfs destroy $1"
+    return 0
+}
+
+
+_umountalt() {
     if ! _checkfstat
     then
         echo
@@ -618,6 +623,7 @@ _umountalt() {
     swapoff /dev/gpt/swap${altrootnum}
 }
 
+
 _mountalt() {
     for i in $nonshared_mounts
     do
@@ -636,6 +642,7 @@ _mountalt() {
     altrootnum=`_rootdev | sed 's|.*/root||'`
     swapon /dev/gpt/swap${altrootnum}
 }
+
 
 _linkalt() {
     local _arg altrootdev
@@ -663,6 +670,47 @@ _linkalt() {
         exit 1
     fi
 }
+
+_send_script() {
+    local _cdev _prompt _line
+    _cdev=$1
+    _prompt="`basename $_cdev`:>"
+    while true
+    do
+        read _line
+        if echo "$_line" | grep ^__secure__: >/dev/null 2>&1
+        then
+            _line=`echo "$_line" | sed -e 's/^__secure__://'`
+            echo "$_prompt ***"
+        else
+            echo "$_prompt $_line"
+        fi
+        if echo "$_line" | grep '^#' >/dev/null 2>&1
+        then
+            continue
+        fi
+        printf "$_line\n" >$_cdev
+        if test -z "$_line"
+        then
+            break
+        fi
+        sleep 0.2
+    done
+}
+
+
+# main
+#
+standard_labels="root swap var tmp work usr data"
+nonshared_mounts="/ /dev /var /tmp /work /usr"
+shared_mounts="/data0 /data1"
+
+set -e
+if test -n "$DEBUG"
+then
+    set -x
+fi
+
 
 batch=1
 dryrun=
@@ -778,6 +826,10 @@ elif test "$1" = "list"
 then
     pgrep -lf bhyve: | awk '{print $3;}'
 
+elif test "$1" = "list-images"
+then
+    zfs list -t volume
+
 elif test "$1" = "poweroff"
 then
     if test -n "$2" && ls /dev/vmm | grep -q "$2"
@@ -792,6 +844,10 @@ then
 elif test "$1" = "destroy"
 then
     _destroy $2
+
+elif test "$1" = "destroy-image"
+then
+    _destroy_image $2
 
 elif test "$1" = "run-linux"
 then
@@ -917,6 +973,27 @@ then
     then
         echo "Connecting to $cdev ..."
         cu -l $cdev -t
+    else
+        echo "Could not find console $cdev"
+        exit 1
+    fi
+
+elif test "$1" = "send-script"
+then
+    if test -z "$2"
+    then
+        cdev="/dev/nmdm0B"
+    else
+        cdev="/dev/nmdm${2}B"
+    fi
+    if test -e $cdev
+    then
+        echo "Sending $3 to $cdev ..."
+        if test -e "$3"
+        then
+            cat $3 | _send_script $cdev
+        fi
+
     else
         echo "Could not find console $cdev"
         exit 1

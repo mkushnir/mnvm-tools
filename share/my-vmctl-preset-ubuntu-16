@@ -1,0 +1,21 @@
+#!/bin/sh
+
+#set -x
+
+if test -z "$1"
+then
+    idx=0
+else
+    idx=$1
+fi
+idx=$((16 + $idx))
+
+tag=ubuntu-16
+#idbase=ubuntu-16.00@base
+iso=ubuntu-16.04.4-server-amd64.iso
+
+#grubr=grub.conf-ubuntu-run
+grubi=grub.conf-ubuntu-install
+
+. ./my-vmctl-preset-subr
+run_simple_linux_preset $*

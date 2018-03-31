@@ -1,0 +1,9 @@
+#!/bin/sh
+
+idx=4
+tag=freebsd-pear-11
+mnvm_node_id=$(( 100 + $idx ))
+#force=1
+
+. ./my-vmctl-preset-subr
+clone_freebsd_preset

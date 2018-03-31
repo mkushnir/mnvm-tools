@@ -1,0 +1,20 @@
+#!/bin/sh
+
+#set -x
+
+if test -z "$1"
+then
+    idx=0
+else
+    idx=$1
+fi
+idx=$((32 + $idx))
+
+tag=centos-7
+iso=CentOS-7-x86_64-Everything-1708.iso
+
+#grubr=grub.conf-centos-run
+grubi=grub.conf-centos-install
+
+. ./my-vmctl-preset-subr
+run_simple_linux_preset $*
