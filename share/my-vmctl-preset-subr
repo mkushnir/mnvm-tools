@@ -1,7 +1,10 @@
 #!/bin/sh
 
 R=/skyrta/vm
+# dev
 D=/dev/zvol/skyrta
+# pool
+P=skyrta
 
 if zpool list >/dev/null 2>&1
 then
@@ -12,16 +15,26 @@ then
 fi
 #export _zfs
 
+required () {
+    set -e
+    for i in $*
+    do
+        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+    done
+    set +e
+}
+
+
 newvol () {
-    local _vol _name _size
+    local _dataset _vol _name _size
     _name=$1
     _size=$2
     if test -n "$_zfs"
     then
-        _vol=skyrta/$_name
-        zfs destroy $_vol
-        zfs create -V $_size $_vol
-        _vol=/dev/zvol/$_vol
+        _dataset=$P/$_name
+        _vol=$D/$_name
+        zfs destroy $_dataset
+        zfs create -V $_size $_dataset
     else
         _vol=$_name
         rm -f $_vol && truncate -s $_size $_vol
@@ -34,15 +47,29 @@ getvol () {
     _name=$1
     if test -n "$_zfs"
     then
-        _vol=/dev/zvol/skyrta/$_name
+        _vol=$D/$_name
     else
         _vol=$_name
     fi
     echo $_vol
 }
 
+getdataset () {
+    local _dataset _name
+    _name=$1
+    if test -n "$_zfs"
+    then
+        _dataset=$P/$_name
+    else
+        _dataset=$_name
+    fi
+    echo $_dataset
+}
+
 run_simple_linux_preset () {
     local _cmd _d _g _ddev _devmapi _devmapr
+
+    required idx tag
 
     my-vmctl destroy $name
 
@@ -90,6 +117,9 @@ EOD
 
 run_simple_freebsd_preset () {
     local _cmd _ddev
+
+    required idx tag
+
     my-vmctl destroy $name
     if test "$1" = "install"
     then
@@ -107,6 +137,9 @@ run_simple_freebsd_preset () {
 
 run_simple_windows_preset () {
     local _cmd _ddev
+
+    required idx tag
+
     my-vmctl destroy $name
     if test "$1" = "install"
     then
@@ -129,11 +162,49 @@ run_simple_windows_preset () {
     my-vmctl -M1 $_cmd $bootrom $iso $_ddev $mac $name 
 }
 
+clone_preset () {
+    local _ddevbase _ddev _vol _rootvol _hostname _ip4
+
+    required idx tag mnvm_node_id
+
+    _ddevbase=`getdataset $diskbase`
+    _ddev=`getdataset $disk`
+    _vol=`getvol $disk`
+    _rootvol="${_vol}s1a"
+    _hostname=vm-pear-${mnvm_node_id}
+    _ip4=10.1.3.${mnvm_node_id}
+
+    if ! zfs list "${_ddevbase}" >/dev/null 2>&1
+    then
+        echo "Invalid snapshot ${_ddevbase}"
+        exit 1
+    fi
+    if zfs list "${_ddev}" >/dev/null 2>&1
+    then
+        if test -z "$force"
+        then
+            echo "Already exists ${_ddev}"
+            exit 1
+        else
+            zfs destroy ${_ddev}
+        fi
+    fi
+    zfs clone ${_ddevbase} ${_ddev}
+    if test -c ${_rootvol}
+    then
+        mount $_rootvol /mnt
+        sed -E -e "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" -i.bak /mnt/etc/rc.conf
+        umount /mnt
+    fi
+}
+
 cdev="$idx"
 midx=`printf "%02x" $idx`
+idbase=${tag}@base
 id=${tag}.${midx}
 name=vm-${id}
 size=32G
 cpu=$idx
 mac=58:9c:fc:ea:00:$midx
 disk=.diskdev-${id}
+diskbase=.diskdev-${idbase}
