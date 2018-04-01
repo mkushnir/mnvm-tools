@@ -5,7 +5,6 @@ test -n "$idx" || exit 1
 idx=$((16 + $idx))
 mnvm_node_id=$(( 100 + $idx ))
 tag=ubuntu-16
-#idbase=ubuntu-16.00@base
 #force=1
 
 . ./my-vmctl-preset-subr
