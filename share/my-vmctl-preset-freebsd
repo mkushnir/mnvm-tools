@@ -2,19 +2,13 @@
 
 #set -x
 
-if test -z "$1"
-then
-    idx=0
-else
-    idx=$1
-fi
+idx=$2
+test -n "$idx" || exit 1
+mnvm_node_id=$(( 100 + $idx ))
 
-
-tag=freebsd-pear-11
+tag=freebsd-11
 iso=FreeBSD-11.1-RELEASE-amd64-bootonly.iso
-
-
-
+idbase=${tag}.00@base
 
 . ./my-vmctl-preset-subr
 run_simple_freebsd_preset $*

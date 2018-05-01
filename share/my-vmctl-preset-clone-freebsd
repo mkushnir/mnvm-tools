@@ -1,8 +1,10 @@
 #!/bin/sh
 
-idx=4
-tag=freebsd-pear-11
+idx=$2
+test -n "$idx" || exit 1
 mnvm_node_id=$(( 100 + $idx ))
+tag=freebsd-pear-11
+#idbase=${tag}.10@base
 #force=1
 
 . ./my-vmctl-preset-subr

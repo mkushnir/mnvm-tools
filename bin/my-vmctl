@@ -7,17 +7,17 @@ usage() {
     echo "    teardown [altroot]"
     echo "    start-iface"
     echo "    stop-iface"
-    echo "    install distro disk mac vmname"
-    echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk mac vmname"
-    echo "    install-windows bootrom distro disk mac vmname"
-    echo "    run disk mac vmname"
+    echo "    install distro disk[:disk] mac vmname"
+    echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk[:disk] mac vmname"
+    echo "    install-windows bootrom distro disk[:disk] mac vmname"
+    echo "    run disk[:disk] mac vmname"
     echo "    list"
     echo "    list-images"
     echo "    poweroff vmname"
     echo "    destroy vmanme"
     echo "    destroy-image image"
-    echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk mac vmname"
-    echo "    run-windows bootrom disk mac vmname"
+    echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
+    echo "    run-windows bootrom disk[:disk] mac vmname"
     echo "    check"
     echo "    connect"
     echo "    send-script script"
@@ -30,6 +30,10 @@ usage() {
     echo "    umountalt"
     echo "    poweroffalt"
     echo
+}
+
+_split() {
+    echo $2 | awk "{ n = split(\$0, a, \":\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
 }
 
 
@@ -245,7 +249,8 @@ _install() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
@@ -305,7 +310,8 @@ _install_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
         #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
@@ -362,7 +368,8 @@ _install_windows() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _do_it "my-bhyve $mybhyve_opts -I ${_distro} -d ${_disk} -N '${_tap},mac=${_mac}' ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -370,7 +377,7 @@ _install_windows() {
 
 
 _run() {
-    local _disk _tap _mac _vmname _answer
+    local _disk _tap _mac _vmname _cdevnum _answer
 
     _disk=$1
     _mac=$2
@@ -412,7 +419,8 @@ _run() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
@@ -421,7 +429,7 @@ _run() {
 
 
 _run_linux() {
-    local _grubconf _disk _tap _mac _vmname _answer
+    local _grubconf _disk _tap _mac _vmname _cdevnum _answer
 
     _grubconf=$1
     _devmap=$2
@@ -474,7 +482,8 @@ _run_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} -d ${_disk} ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
@@ -536,7 +545,8 @@ _run_windows() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} -d ${_disk} ${_vmname}"
+        local _diskopt="`_split -d ${_disk}`"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
     else
         echo "Exiting ..."
     fi

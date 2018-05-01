@@ -122,8 +122,8 @@ do
         -d)
             shift
             d="`_abspath $1`"
-            #disk_opt="-s ${busid}:0,virtio-blk,$d"
-            disk_opt="-s ${busid}:0,ahci-hd,$d"
+            #disk_opt="${disk_opt} -s ${busid}:0,virtio-blk,$d"
+            disk_opt="${disk_opt} -s ${busid}:0,ahci-hd,$d"
             busid=$(( busid + 1 ))
             if test -z "$load_disk"
             then
