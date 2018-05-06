@@ -2,7 +2,7 @@
 
 usage() {
     echo "Usage:"
-    echo "[ DEBUG=1 ] `basename $0` [ -i ]"
+    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -M num ] [ -n ] [ -P num ]"
     echo "    setup [altroot]"
     echo "    teardown [altroot]"
     echo "    start-iface"
@@ -10,6 +10,7 @@ usage() {
     echo "    install distro disk[:disk] mac vmname"
     echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk[:disk] mac vmname"
     echo "    install-windows bootrom distro disk[:disk] mac vmname"
+    echo "    install-uefi distro disk[:disk] mac vmname"
     echo "    run disk[:disk] mac vmname"
     echo "    list"
     echo "    list-images"
@@ -18,6 +19,7 @@ usage() {
     echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
     echo "    run-windows bootrom disk[:disk] mac vmname"
+    echo "    run-uefi disk[:disk] mac vmname"
     echo "    check"
     echo "    connect"
     echo "    send-script script"
@@ -33,7 +35,7 @@ usage() {
 }
 
 _split() {
-    echo $2 | awk "{ n = split(\$0, a, \":\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
+    echo $2 | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
 }
 
 
@@ -249,7 +251,7 @@ _install() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -310,7 +312,7 @@ _install_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -353,9 +355,11 @@ _install_windows() {
         exit 1
     fi
 
-    mybhyve_opts="${mybhyve_opts} -B -E xhci,tablet -c /dev/nmdm0A -l com2,/dev/nmdm1A"
+    mybhyve_opts="${mybhyve_opts} -B"
+    mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+    mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+    mybhyve_opts="${mybhyve_opts} -c /dev/nmdm0A -l com2,/dev/nmdm1A"
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
-    mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
     _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
@@ -368,8 +372,63 @@ _install_windows() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_install_uefi() {
+    local _distro _disk _mac _fbuf _vmname _answer _tap _bootrom
+
+    _distro=$1
+    _disk=$2
+    _mac=$3
+    _fbuf=$4
+    _vmname=$5
+    if test -z "${_distro}"
+    then
+        echo "distro needed"
+        exit 1
+    fi
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    if ! test -f "${_bootrom}"
+    then
+        echo "No such file: ${_bootrom}"
+        exit 1
+    fi
+    _tap=`_pick_tap`
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_split $disk_switch ${_disk}`"
+        mybhyve_opts="${mybhyve_opts} -B"
+        mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+        mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+        mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
+        _do_it "my-bhyve $mybhyve_opts  -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -419,7 +478,7 @@ _run() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -482,7 +541,7 @@ _run_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} ${_diskopt} ${_vmname}"
         #_destroy_tap ${_tap}
     else
@@ -530,9 +589,11 @@ _run_windows() {
         exit 1
     fi
 
-    mybhyve_opts="${mybhyve_opts} -B -E xhci,tablet -c /dev/nmdm0A -l com2,/dev/nmdm1A"
+    mybhyve_opts="${mybhyve_opts} -B"
+    mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+    mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+    mybhyve_opts="${mybhyve_opts} -c /dev/nmdm0A -l com2,/dev/nmdm1A"
     mybhyve_opts="${mybhyve_opts} -l bootrom,`_abspath ${_bootrom}`"
-    mybhyve_opts="${mybhyve_opts} -E fbuf,${_fbuf}"
 
     _tap=`_pick_tap`
     echo "bootrom: ${_bootrom}"
@@ -545,8 +606,56 @@ _run_windows() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _diskopt="`_split -d ${_disk}`"
+        local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_uefi() {
+    local _disk _mac _fbuf _vmname _answer _tap _bootrom
+
+    _disk=$1
+    _mac=$2
+    _fbuf=$3
+    _vmname=$4
+    if test -z "${_disk}"
+    then
+        echo "disk needed"
+        exit 1
+    fi
+    if test -z "${_vmname}"
+    then
+        _vmname='test-bhyve'
+    fi
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    if ! test -f "${_bootrom}"
+    then
+        echo "No such file: ${_bootrom}"
+        exit 1
+    fi
+    _tap=`_pick_tap`
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_split $disk_switch ${_disk}`"
+        mybhyve_opts="${mybhyve_opts} -B"
+        mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+        mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+        mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
+        _do_it "my-bhyve $mybhyve_opts ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -724,8 +833,10 @@ fi
 
 batch=1
 dryrun=
-mybhyve_opts=
-args=`getopt E:iM:nP: $*`
+mybhyve_opts='-u3'
+disk_switch=-d
+
+args=`getopt bE:iM:nP: $*`
 if test $? -ne 0
 then
     exit 1
@@ -734,6 +845,11 @@ set -- $args
 while true
 do
     case "$1" in
+        -b)
+            shift
+            disk_switch=-b
+        ;;
+
         -E)
             shift
             mybhyve_opts="$mybhyve_opts -E $1"
@@ -824,6 +940,11 @@ then
     done
     _install_linux $grubdev $grubdir "$grubconf" $1 $2 $3 $4 $5
 
+elif test "$1" = "install-uefi"
+then
+    shift
+    _install_uefi $1 $2 $3 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $4
+
 elif test "$1" = "install-windows"
 then
     _install_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $6
@@ -900,7 +1021,12 @@ then
 
 elif test "$1" = "run-windows"
 then
-    _run_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $6
+    _run_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768" $6
+
+elif test "$1" = "run-uefi"
+then
+    shift
+    _run_uefi $1 $2 "tcp=10.1.1.10:5900,w=1024,h=768" $3
 
 elif test "$1" = "runalt"
 then

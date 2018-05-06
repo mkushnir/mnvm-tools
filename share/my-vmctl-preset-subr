@@ -26,6 +26,7 @@ newvol () {
     echo $_vol
 }
 
+
 getvol () {
     local _vol _name
     _name=$1
@@ -33,12 +34,14 @@ getvol () {
     echo $_vol
 }
 
+
 getdataset () {
     local _dataset _name
     _name=$1
     _dataset=$P/$_name
     echo $_dataset
 }
+
 
 run_simple_linux_preset () {
     local _cmd _d _g _ddev _devmapi _devmapr _cdisk
@@ -82,6 +85,11 @@ run_simple_linux_preset () {
         configure_linux
         return $?
 
+    elif test "$1" = "configure"
+    then
+        configure_linux
+        return $?
+
     else
         return 1
     fi
@@ -100,9 +108,10 @@ EOD
 (hd1) ${_cdisk}
 EOD
 
-    #my-vmctl -P0:$cpu $_cmd $_g $_d $iso $_ddev $mac $name $cdev
-    my-vmctl -M1 $_cmd $_g $_d $iso $_ddev:${_cdisk} $mac $name $cdev
+    #export DEBUG=yes
+    my-vmctl -M1 $B_opt $_cmd $_g $_d $iso "$_ddev|${_cdisk}" $mac $name $cdev
 }
+
 
 run_simple_freebsd_preset () {
     local _cmd _ddev
@@ -131,9 +140,9 @@ run_simple_freebsd_preset () {
         return 1
     fi
 
-    #my-vmctl -P0:$cpu $_cmd $iso $_ddev $mac $name $cdev
-    my-vmctl -M1 $_cmd $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $B_opt $_cmd $iso $_ddev $mac $name $cdev
 }
+
 
 run_simple_windows_preset () {
     local _cmd _ddev
@@ -148,7 +157,7 @@ run_simple_windows_preset () {
     elif test "$1" = "run"
     then
         _cmd=run-windows
-        _ddev=`newvol $disk $size`
+        _ddev=`getvol $disk $size`
         if test -z "$fakeiso"
         then
             fakeiso=.fakeiso-$name
@@ -159,10 +168,46 @@ run_simple_windows_preset () {
         return 1
     fi
 
-    export DEBUG=yes
+    #export DEBUG=yes
+    my-vmctl -M1 $B_opt $_cmd $bootrom $iso $_ddev $mac $name 
+}
 
-    #my-vmctl -P0:$cpu $_cmd $bootrom $iso $_ddev $mac $name 
-    my-vmctl -M1 $_cmd $bootrom $iso $_ddev $mac $name 
+
+run_simple_uefi_preset () {
+    required idx tag
+
+    my-vmctl destroy $name
+    if test "$1" = "install"
+    then
+        _cmd=install-uefi
+        _ddev=`newvol $disk $size`
+        configure_linux
+
+    elif test "$1" = "run"
+    then
+        _cmd=run-uefi
+        _ddev=`getvol $disk $size`
+        iso=
+
+    elif test "$1" = "clone"
+    then
+        clone_zfs_dataset
+        configure_linux
+        return $?
+
+    elif test "$1" = "configure"
+    then
+        configure_linux
+        return $?
+
+    else
+        return 1
+    fi
+
+    _cdisk="$R/${disk}.cfg"
+
+    #export DEBUG=yes
+    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $name
 }
 
 
@@ -213,14 +258,16 @@ configure_linux () {
     local _passwd _cdisk _mdev
     local _ifname _ip4 _ip4mask _ip4net _ip4bcast _ip4gway _ip4ns _hostname
 
-    required disk mnvm_node_id cdev
+    required disk vmnet mnvm_node_id cdev
 
     _ifname=enp0s1
-    _ip4=10.1.3.${mnvm_node_id}
+    _ifnameg='enp0s*'
+    _ip4=${vmnet}.${mnvm_node_id}
+    _ip4netlen=24
     _ip4mask=255.255.255.0
-    _ip4net=10.1.3.0
-    _ip4bcast=10.1.3.255
-    _ip4gway=10.1.3.10
+    _ip4net=${vmnet}.0
+    _ip4bcast=${vmnet}.255
+    _ip4gway=${vmnet}.10
     _ip4ns=10.1.1.10
     _hostname=vm-pear-${mnvm_node_id}
 
@@ -230,7 +277,7 @@ configure_linux () {
     _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
     mount_msdosfs /dev/${_mdev} /mnt
 
-    mkdir -p /mnt/etc/network/
+    mkdir -p /mnt/etc/network/ /mnt/etc/netplan/
     cat <<EOD >/mnt/etc/network/interfaces
 source /etc/network/interfaces.d/*
 auto lo
@@ -243,6 +290,24 @@ iface $_ifname inet static
   brodcast $_ip4bcast
   gateway $_ip4gway
   dns-nameservers $_ip4ns
+EOD
+
+    cat <<EOD >/mnt/etc/netplan/01-netcfg.yaml
+network:
+    version: 2
+    renderer: networkd
+    ethernets:
+        qwe:
+            match:
+                name: $_ifnameg
+            addresses:
+                - $_ip4/$_ip4netlen
+            gateway4: $_ip4gway
+            nameservers:
+                search:
+                    - local
+                addresses:
+                    - $_ip4ns
 EOD
 
     echo ${_hostname} > /mnt/etc/hostname
@@ -272,6 +337,7 @@ P=
 R=
 # dev dir: for disk devices
 D=
+B_opt=
 if zpool list >/dev/null 2>&1
 then
     if test -z "$MY_VMCTL_DDEV_UFS"
@@ -281,6 +347,7 @@ then
         P=skyrta
         R=/$P/vm
         D=/dev/zvol/$P
+        B_opt=-b
     else
         R="`pwd`"
         D="`pwd`"
