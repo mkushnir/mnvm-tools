@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #set -x
+mnvm_net=10.1.3
 
 idx=$2
 test -n "$idx" || exit 1

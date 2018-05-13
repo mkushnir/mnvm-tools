@@ -27,6 +27,21 @@ file_required () {
 }
 
 
+cdev_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -c \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
 dir_required () {
     local _old_e _old_p
     _old_e=`set +o | grep errexit`
@@ -279,16 +294,18 @@ clone_zfs_dataset () {
 configure_freebsd () {
     local _vol _rootvol
 
-    var_required mnvm_node_id
+    var_required mnvm_net mnvm_node_id
 
     _vol=`getvol $disk`
-    _rootvol="${_vol}s1a"
-    if test -c ${_rootvol}
-    then
-        mount $_rootvol /mnt
-        sed -E -e "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" -i.bak /mnt/etc/rc.conf
-        umount /mnt
-    fi
+    # GPT partitioning scheme assumed (bsdinstall option)
+    _rootvol="${_vol}p2"
+    cdev_required ${_rootvol}
+    mount $_rootvol /mnt
+    sed -E \
+        -e "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" \
+        -e "s/^mnvm_net=.*$/mnvm_net=$mnvm_net/" \
+        -i.bak /mnt/etc/rc.conf
+    umount /mnt
 }
 
 
@@ -296,16 +313,16 @@ configure_linux () {
     local _passwd _cdisk _mdev
     local _ifname _ip4 _ip4mask _ip4net _ip4bcast _ip4gway _ip4ns _hostname
 
-    var_required vmnet mnvm_node_id
+    var_required mnvm_net mnvm_node_id
 
     _ifname=enp0s1
     _ifnameg='enp0s*'
-    _ip4=${vmnet}.${mnvm_node_id}
+    _ip4=${mnvm_net}.${mnvm_node_id}
     _ip4netlen=24
     _ip4mask=255.255.255.0
-    _ip4net=${vmnet}.0
-    _ip4bcast=${vmnet}.255
-    _ip4gway=${vmnet}.10
+    _ip4net=${mnvm_net}.0
+    _ip4bcast=${mnvm_net}.255
+    _ip4gway=${mnvm_net}.10
     _ip4ns=10.1.1.10
     _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
     var_required _hostname
