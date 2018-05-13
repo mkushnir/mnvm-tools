@@ -9,8 +9,8 @@ usage() {
     echo "    stop-iface"
     echo "    install distro disk[:disk] mac vmname"
     echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk[:disk] mac vmname"
-    echo "    install-windows bootrom distro disk[:disk] mac vmname"
-    echo "    install-uefi distro disk[:disk] mac vmname"
+    echo "    install-windows bootrom distro disk[:disk] mac cdev vmname"
+    echo "    install-uefi distro disk[:disk] mac cdev vmname"
     echo "    run disk[:disk] mac vmname"
     echo "    list"
     echo "    list-images"
@@ -18,8 +18,8 @@ usage() {
     echo "    destroy vmanme"
     echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
-    echo "    run-windows bootrom disk[:disk] mac vmname"
-    echo "    run-uefi disk[:disk] mac vmname"
+    echo "    run-windows bootrom disk[:disk] mac cdev vmname"
+    echo "    run-uefi disk[:disk] mac cdev vmname"
     echo "    check"
     echo "    connect"
     echo "    send-script script"
@@ -33,6 +33,61 @@ usage() {
     echo "    poweroffalt"
     echo
 }
+
+
+var_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+    done
+    eval $_old_e
+}
+
+
+file_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -f \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+dir_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -d \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+prog_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
+    done
+    eval $_old_e
+}
+
 
 _split() {
     echo $2 | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
@@ -142,11 +197,11 @@ _start_ifaces() {
     #    ifconfig bridge0 inet 10.1.2.10 netmask 255.255.255.0
     #    ifconfig bridge0 up
     #fi
-    for i in 0 1 2 3 4 5 6 7 8 9
-    do
-        _tap=`ifconfig tap create`
-        ifconfig bridge0 addm ${_tap}
-    done
+    #for i in 0 1 2 3 4 5 6 7 8 9
+    #do
+    #    _tap=`ifconfig tap create`
+    #    ifconfig bridge0 addm ${_tap}
+    #done
 }
 
 
@@ -185,7 +240,7 @@ _new_tap() {
     local _tap
     _tap=`ifconfig tap create`
     ifconfig bridge0 addm ${_tap}
-    ifconfig ${_tap} up
+    #ifconfig ${_tap} up
     chmod 0660 /dev/${_tap}
     echo ${_tap}
 }
@@ -199,9 +254,10 @@ _pick_tap() {
         if echo $i | egrep -q 'tap[0-9]+'
         then
             echo $i
-            break
+            return
         fi
     done
+    _new_tap
 }
 
 
@@ -221,20 +277,9 @@ _install() {
     _disk=$2
     _mac=$3
     _vmname=$4
-    if test -z "${_distro}"
-    then
-        echo "distro needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _distro _disk _mac _vmname
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
@@ -242,7 +287,6 @@ _install() {
     fi
     mybhyve_opts="$mybhyve_opts -A"
     _tap=`_pick_tap`
-    #_tap=`_new_tap`
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
     echo "tap: ${_tap}"
@@ -253,7 +297,6 @@ _install() {
     then
         local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
-        #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
     fi
@@ -271,32 +314,15 @@ _install_linux() {
     _disk=$6
     _mac=$7
     _vmname=$8
-    if test -z "${_devmap}"
-    then
-        echo "devmap needed"
-        exit 1
-    fi
-    if test -z "${_distro}"
-    then
-        echo "distro needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _grubdev _grubdir _devmap _distro _disk _mac _vmname
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
         exit 1
     fi
     _tap=`_pick_tap`
-    #_tap=`_new_tap`
     echo "grubdev: ${_grubdev}"
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
@@ -314,7 +340,6 @@ _install_linux() {
         fi
         local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
-        #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
     fi
@@ -322,33 +347,18 @@ _install_linux() {
 
 
 _install_windows() {
-    local _bootrom _distro _disk _mac _fbuf _vmname _answer _tap
+    local _bootrom _distro _disk _mac _cdev _fbuf _vmname _answer _tap
 
     _bootrom=$1
     _distro=$2
     _disk=$3
     _mac=$4
-    _fbuf=$5
+    _cdev=$5
     _vmname=$6
-    if test -z "${_bootrom}"
-    then
-        echo "bootrom needed"
-        exit 1
-    fi
-    if test -z "${_distro}"
-    then
-        echo "distro needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _bootrom _distro _disk _mac _cdev _vmname
+    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
@@ -381,38 +391,26 @@ _install_windows() {
 
 
 _install_uefi() {
-    local _distro _disk _mac _fbuf _vmname _answer _tap _bootrom
+    local _distro _disk _mac _cdev _fbuf _vmname _answer _tap _bootrom
 
     _distro=$1
     _disk=$2
     _mac=$3
-    _fbuf=$4
+    _cdev=$4
     _vmname=$5
-    if test -z "${_distro}"
-    then
-        echo "distro needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _distro _disk _mac _cdev _vmname
+    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
         exit 1
     fi
+
     _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
-    if ! test -f "${_bootrom}"
-    then
-        echo "No such file: ${_bootrom}"
-        exit 1
-    fi
+    file_required $_bootrom
+
     _tap=`_pick_tap`
     echo "distro: ${_distro}"
     echo "disk: ${_disk}"
@@ -436,51 +434,35 @@ _install_uefi() {
 
 
 _run() {
-    local _disk _tap _mac _vmname _cdevnum _answer
+    local _disk _tap _mac _vmname _cdevnum _answer _cdev
 
     _disk=$1
     _mac=$2
     _vmname=$3
     _cdevnum=$4
-    if ! ifconfig -l | grep -E -q 'bridge0'
-    then
-        echo "interfaces are not set up"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _disk _mac _vmname _cdevnum
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
         exit 1
     fi
 
-    if test -n "${_cdevnum}"
-    then
-        cdev="/dev/nmdm${_cdevnum}A"
-        mybhyve_opts="$mybhyve_opts -c $cdev"
-        echo "console: $cdev"
-    fi
-    mybhyve_opts="$mybhyve_opts -A"
+    _cdev="/dev/nmdm${_cdevnum}A"
     _tap=`_pick_tap`
-    #_tap=`_new_tap`
     echo "disk: ${_disk}"
     echo "tap: ${_tap}"
     echo "mac: ${_mac}"
+    echo "console: $_cdev"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
+        mybhyve_opts="$mybhyve_opts -A"
+        mybhyve_opts="$mybhyve_opts -c $_cdev"
         local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' ${_diskopt} ${_vmname}"
-        #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
     fi
@@ -488,7 +470,7 @@ _run() {
 
 
 _run_linux() {
-    local _grubconf _disk _tap _mac _vmname _cdevnum _answer
+    local _grubconf _devmap _disk _tap _mac _vmname _cdevnum _answer
 
     _grubconf=$1
     _devmap=$2
@@ -496,43 +478,22 @@ _run_linux() {
     _mac=$4
     _vmname=$5
     _cdevnum=$6
-    if ! ifconfig -l | grep -E -q 'bridge0'
-    then
-        echo "interfaces are not st up"
-        exit 1
-    fi
-    if test -z "${_devmap}"
-    then
-        echo "devmap needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _devmap _disk _mac _vmname _cdevnum
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
         exit 1
     fi
-    if test -n "${_cdevnum}"
-    then
-        cdev="/dev/nmdm${_cdevnum}A"
-        mybhyve_opts="$mybhyve_opts -c $cdev"
-        echo "console: $cdev"
-    fi
+    cdev="/dev/nmdm${_cdevnum}A"
     _tap=`_pick_tap`
-    #_tap=`_new_tap`
     echo "grubconf: ${_grubconf}"
     echo "devmap: ${_devmap}"
     echo "disk: ${_disk}"
     echo "tap: ${_tap}"
     echo "mac: ${_mac}"
+    echo "console: $cdev"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
@@ -541,9 +502,9 @@ _run_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
+        mybhyve_opts="$mybhyve_opts -c $cdev"
         local _diskopt="`_split $disk_switch ${_disk}`"
         _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} ${_diskopt} ${_vmname}"
-        #_destroy_tap ${_tap}
     else
         echo "Exiting ..."
     fi
@@ -551,38 +512,19 @@ _run_linux() {
 
 
 _run_windows() {
-    local _bootrom _distro _disk _tap _mac _fbuf _vmname _answer
+    local _bootrom _distro _disk _tap _mac _cdev _fbuf _vmname _answer
 
     _bootrom=$1
     _distro=$2
     _disk=$3
     _mac=$4
-    _fbuf=$5
+    _cdev=$5
     _vmname=$6
-    if ! ifconfig -l | grep -E -q 'bridge0'
-    then
-        echo "interfaces are not st up"
-        exit 1
-    fi
-    if test -z "${_bootrom}"
-    then
-        echo "bootrom needed"
-        exit 1
-    fi
-    if test -z "${_distro}"
-    then
-        echo "distro needed"
-        exit 1
-    fi
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _bootrom _distro _disk _mac _cdev _vmname
+    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768"
+    file_required $_bootrom
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
@@ -615,32 +557,24 @@ _run_windows() {
 
 
 _run_uefi() {
-    local _disk _mac _fbuf _vmname _answer _tap _bootrom
+    local _disk _mac _cdev _fbuf _vmname _answer _tap _bootrom
 
     _disk=$1
     _mac=$2
-    _fbuf=$3
+    _cdev=$3
     _vmname=$4
-    if test -z "${_disk}"
-    then
-        echo "disk needed"
-        exit 1
-    fi
-    if test -z "${_vmname}"
-    then
-        _vmname='test-bhyve'
-    fi
+
+    var_required _disk _mac _cdev _vmname
+    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768"
+
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
         echo "${_vmname} is in use"
         exit 1
     fi
     _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
-    if ! test -f "${_bootrom}"
-    then
-        echo "No such file: ${_bootrom}"
-        exit 1
-    fi
+    file_required $_bootrom
+
     _tap=`_pick_tap`
     echo "disk: ${_disk}"
     echo "tap: ${_tap}"
@@ -663,10 +597,12 @@ _run_uefi() {
 
 
 _runalt() {
-    local rootmount bootdev _tap
+    local rootmount bootdev _tap dev _mac
 
     dev=$1
     _mac=$2
+
+    var_required _mac
 
     if ! ifconfig -l | grep -E -q 'bridge0'
     then
@@ -681,11 +617,7 @@ _runalt() {
     if test -z "$dev"
     then
         rootmount="`mount -p | awk '{print $1, $2;}' | grep '/$' | awk '{print $1;}'`"
-        if test -z "$rootmount"
-        then
-            echo "Something wrong with the root mount"
-            exit 1
-        fi
+        var_required rootmount
         if test "$rootmount" = "/dev/gpt/root-wd1000"
         then
             # we are wd1000, so boot from wd1001
@@ -703,9 +635,7 @@ _runalt() {
     fi
     mybhyve_opts="$mybhyve_opts -A -M4"
     _tap=`_pick_tap`
-    #_tap=`_new_tap`
     _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d $bootdev altroot"
-    #_destroy_tap ${_tap}
 }
 
 
@@ -767,6 +697,8 @@ _linkalt() {
     local _arg altrootdev
 
     _arg=$1
+    var_required _arg
+
     altrootdev="`_rootdev`"
     if test -z "$altrootdev"
     then
@@ -784,15 +716,15 @@ _linkalt() {
         rm -f /altroot/etc/rc.conf
         ln -s rc.conf.host /altroot/etc/rc.conf
         #sed -e 's/^\(ttyu0.*\)\(on\)\(.*\)$/\1off\3/' -i '.bak' /altroot/etc/ttys
-    else
-        echo "linkalt can be one of vm, host"
-        exit 1
     fi
 }
 
 _send_script() {
     local _cdev _prompt _line
+
     _cdev=$1
+    var_required _cdev
+
     _prompt="`basename $_cdev`:>"
     while true
     do
@@ -943,11 +875,11 @@ then
 elif test "$1" = "install-uefi"
 then
     shift
-    _install_uefi $1 $2 $3 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $4
+    _install_uefi $1 $2 $3 $4 $5
 
 elif test "$1" = "install-windows"
 then
-    _install_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768,wait" $6
+    _install_windows $2 $3 $4 $5 $6 $7
 
 elif test "$1" = "run"
 then
@@ -1021,12 +953,12 @@ then
 
 elif test "$1" = "run-windows"
 then
-    _run_windows $2 $3 $4 $5 "tcp=10.1.1.10:5900,w=1024,h=768" $6
+    _run_windows $2 $3 $4 $5 $6 $7
 
 elif test "$1" = "run-uefi"
 then
     shift
-    _run_uefi $1 $2 "tcp=10.1.1.10:5900,w=1024,h=768" $3
+    _run_uefi $1 $2 $3 $4
 
 elif test "$1" = "runalt"
 then

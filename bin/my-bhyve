@@ -1,5 +1,29 @@
 #!/bin/sh
 
+var_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+    done
+    eval $_old_e
+}
+
+
+prog_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
+    done
+    eval $_old_e
+}
+
+
 usage() {
     echo "`basename $0` [options]"
 }
@@ -25,24 +49,24 @@ _do_it() {
     fi
     if test -n "$DEBUG"
     then
-        logger "Running $*"
+        logger "Running $@"
     fi
     case "${_answer}" in
         yes)
             if test -n "$dryrun"
             then
-                echo "$*";
+                echo "$@";
             else
-                eval "$*";
+                eval "$@";
             fi
         ;;
         batch)
             batch=1
             if test -n "$dryrun"
             then
-                echo "$*";
+                echo "$@";
             else
-                eval "$*";
+                eval "$@";
             fi
         ;;
         *)
@@ -51,6 +75,10 @@ _do_it() {
     esac
 }
 
+
+#
+# main
+#
 if test -n "$DEBUG"
 then
     set -x
@@ -294,33 +322,19 @@ then
     fi
 fi
 
-if test -z "$load_disk"
-then
-    echo "load disk cannot be empty"
-    exit 1
-fi
-
-if test -z "$name"
-then
-    echo "Name cannot be empty"
-    exit 1
-fi
+prog_required bhyvectl bhyve
+var_required load_disk name
 
 if test -n "$DEBUG"
 then
     set -x
 fi
 
-if test -d /var/tmp
-then
-    cd /var/tmp
-fi
-
 while true
 do
     _do_it "bhyvectl --vm=$name --destroy"
 
-    if test -z $grub_devmap
+    if test -z "$grub_devmap"
     then
         if test -z "$nobhyveload"
         then
@@ -328,20 +342,14 @@ do
         fi
     else
         memsz=4096
-        if which -s grub-bhyve
+        prog_required grub-bhyve
+        if test -n "$grubconf" -a -f "$grubconf"
         then
-            if test -n "$grubconf" -a -f "$grubconf"
-            then
-                _do_it "cat $grubconf | grub-bhyve -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
-            else
-                _do_it "grub-bhyve -v -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
-            fi
+            _do_it "cat $grubconf | grub-bhyve -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
         else
-            echo "Failed ro find grub-bhyve"
-            exit 1
+            _do_it "grub-bhyve -v -r $grubdev -d $grubdir -m $grub_devmap -M $memsz $name"
         fi
     fi
-
     if test $? -ne 0
     then
         echo "Failed to load $name"
@@ -362,11 +370,13 @@ do
         $name"
 
     _exitcode=$?
-    echo "bhyve returned with $_exitcode"
+    echo -n "bhyve returned with $_exitcode: "
     if test $_exitcode -ne 0
     then
+        echo "exiting ..."
         break
     else
+        echo "re-starting ..."
         sleep 1
     fi
 done

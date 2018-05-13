@@ -1,12 +1,56 @@
 #!/bin/sh
 
-required () {
+var_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
     set -e
-    for i in $*
+    for i in "$@"
     do
         eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
     done
-    set +e
+    eval $_old_e
+}
+
+
+file_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -f \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+dir_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -d \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+prog_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
+    done
+    eval $_old_e
 }
 
 
@@ -46,8 +90,6 @@ getdataset () {
 run_simple_linux_preset () {
     local _cmd _d _g _ddev _devmapi _devmapr _cdisk
 
-    required idx tag
-
     my-vmctl destroy $name
 
     _devmapi=device.map-${id}.install
@@ -55,6 +97,7 @@ run_simple_linux_preset () {
 
     if test "$1" = "install"
     then
+        var_required iso
         _cmd=install-linux
         _ddev=`newvol $disk $size`
         if test -n "$grubi"
@@ -116,11 +159,10 @@ EOD
 run_simple_freebsd_preset () {
     local _cmd _ddev
 
-    required idx tag
-
     my-vmctl destroy $name
     if test "$1" = "install"
     then
+        var_required iso
         _cmd=install
         _ddev=`newvol $disk $size`
 
@@ -147,11 +189,10 @@ run_simple_freebsd_preset () {
 run_simple_windows_preset () {
     local _cmd _ddev
 
-    required idx tag
-
     my-vmctl destroy $name
     if test "$1" = "install"
     then
+        var_required iso
         _cmd=install-windows
         _ddev=`newvol $disk $size`
     elif test "$1" = "run"
@@ -174,11 +215,10 @@ run_simple_windows_preset () {
 
 
 run_simple_uefi_preset () {
-    required idx tag
-
     my-vmctl destroy $name
     if test "$1" = "install"
     then
+        var_required iso
         _cmd=install-uefi
         _ddev=`newvol $disk $size`
         configure_linux
@@ -207,14 +247,12 @@ run_simple_uefi_preset () {
     _cdisk="$R/${disk}.cfg"
 
     #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $name
+    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $cdev $name
 }
 
 
 clone_zfs_dataset () {
     local _ddevbase _ddev _rootvol _hostname _ip4
-
-    required idx tag mnvm_node_id
 
     _ddevbase=`getdataset $diskbase`
     _ddev=`getdataset $disk`
@@ -241,7 +279,7 @@ clone_zfs_dataset () {
 configure_freebsd () {
     local _vol _rootvol
 
-    required disk mnvm_node_id
+    var_required mnvm_node_id
 
     _vol=`getvol $disk`
     _rootvol="${_vol}s1a"
@@ -258,7 +296,7 @@ configure_linux () {
     local _passwd _cdisk _mdev
     local _ifname _ip4 _ip4mask _ip4net _ip4bcast _ip4gway _ip4ns _hostname
 
-    required disk vmnet mnvm_node_id cdev
+    var_required vmnet mnvm_node_id
 
     _ifname=enp0s1
     _ifnameg='enp0s*'
@@ -269,7 +307,8 @@ configure_linux () {
     _ip4bcast=${vmnet}.255
     _ip4gway=${vmnet}.10
     _ip4ns=10.1.1.10
-    _hostname=vm-pear-${mnvm_node_id}
+    _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
+    var_required _hostname
 
     _cdisk="$R/${disk}.cfg"
     rm -f ${_cdisk}
@@ -357,6 +396,7 @@ fi
 # Required variables:
 #   idx, ordinal number
 #   tag, base/template image name like ubuntu-pear-16 or freebsd-pear-11
+var_required idx tag
 cdev="$idx"
 midx=`printf "%02x" $idx`
 idbase=${idbase:-${tag}@base}
