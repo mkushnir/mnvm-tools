@@ -647,10 +647,18 @@ _destroy() {
 
 _destroy_image() {
     batch=
-    _do_it "zfs destroy $1"
+    if test -n "$_zfs"
+        _do_it "zfs destroy $1"
+    fi
     return 0
 }
 
+_list_images() {
+    if test -n "$_zfs"
+        do_it "zfs list -t volume"
+    fi
+    return 0
+}
 
 _umountalt() {
     if ! _checkfstat
@@ -762,6 +770,14 @@ then
     set -x
 fi
 
+_zfs=
+if zpool list >/dev/null 2>&1
+then
+    if test -z "$MY_VMCTL_DDEV_UFS"
+    then
+        _zfs=1
+    fi
+fi
 
 batch=1
 dryrun=
@@ -891,7 +907,7 @@ then
 
 elif test "$1" = "list-images"
 then
-    zfs list -t volume
+    _list_images
 
 elif test "$1" = "poweroff"
 then
