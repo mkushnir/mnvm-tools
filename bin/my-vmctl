@@ -1051,17 +1051,24 @@ elif test "$1" = "connect"
 then
     if test -z "$2"
     then
-        cdev="/dev/nmdm0B"
+        _cdev=0
     else
-        cdev="/dev/nmdm${2}B"
+        _cdev=$2
     fi
-    if test -e $cdev
+
+    addr="10.1.1.10:$(( 5900 + $_cdev ))"
+    if sockstat -l | grep -q $addr
     then
-        echo "Connecting to $cdev ..."
-        cu -l $cdev -t
+        vncviewer $addr
     else
-        echo "Could not find console $cdev"
-        exit 1
+        cdev="/dev/nmdm${_cdev}B"
+        if test -e $cdev
+        then
+            echo "Connecting to $cdev ..."
+            cu -l $cdev -t
+        else
+            echo "Cannot connect to $cdev"
+        fi
     fi
 
 elif test "$1" = "send-script"
