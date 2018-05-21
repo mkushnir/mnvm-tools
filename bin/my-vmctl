@@ -657,7 +657,7 @@ _destroy_image() {
 _list_images() {
     if test -n "$_zfs"
     then
-        do_it "zfs list -t volume"
+        _do_it "zfs list -t volume"
     fi
     return 0
 }
