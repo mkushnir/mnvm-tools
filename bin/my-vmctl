@@ -648,6 +648,7 @@ _destroy() {
 _destroy_image() {
     batch=
     if test -n "$_zfs"
+    then
         _do_it "zfs destroy $1"
     fi
     return 0
@@ -655,6 +656,7 @@ _destroy_image() {
 
 _list_images() {
     if test -n "$_zfs"
+    then
         do_it "zfs list -t volume"
     fi
     return 0
