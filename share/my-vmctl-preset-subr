@@ -143,11 +143,6 @@ run_simple_linux_preset () {
         configure_linux
         return $?
 
-    elif test "$1" = "configure"
-    then
-        configure_linux
-        return $?
-
     else
         return 1
     fi
@@ -333,7 +328,7 @@ configure_linux () {
     _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
     mount_msdosfs /dev/${_mdev} /mnt
 
-    mkdir -p /mnt/etc/network/ /mnt/etc/netplan/
+    mkdir -p /mnt/etc/network/ /mnt/etc/netplan/ /mnt/etc/sysconfig/network-scripts
     cat <<EOD >/mnt/etc/network/interfaces
 source /etc/network/interfaces.d/*
 auto lo
@@ -366,7 +361,31 @@ network:
                     - $_ip4ns
 EOD
 
+    cat <<EOD >/mnt/etc/sysconfig/network-scripts/ifcfg-eth0
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=static
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=eth0
+DEVICE=eth0
+IPADDR=$_ip4
+NETMASK=$_ip4mask
+NETWORK=$_ip4net
+BROADCAST=$_ip4bcast
+GATEWAY=$_ip4gway
+DNS1=$_ip4ns
+ONBOOT=yes
+EOD
+
     echo ${_hostname} > /mnt/etc/hostname
+    echo "HOSTANME=${_hostname}" > /mnt/etc/sysconfig/network
 
     umount /mnt
     mdconfig -d -u ${_mdev}

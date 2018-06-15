@@ -1,21 +1,17 @@
 #!/bin/sh
 
-#set -x
+MY_VMCTL_DDEV_UFS=1
+mnvm_net=10.1.2
 
-vmnet=10.1.3
-if test -z "$1"
-then
-    idx=0
-else
-    idx=$1
-fi
+#set -x
+idx=$2
+test -n "$idx" || exit 1
 idx=$((32 + $idx))
+mnvm_node_id=$(( 100 + $idx ))
 
 tag=centos-7
 iso=CentOS-7-x86_64-Everything-1708.iso
-
-#grubr=grub.conf-centos-run
-grubi=grub.conf-centos-install
+idbase=${tag}.20@base
 
 . ./my-vmctl-preset-subr
-run_simple_linux_preset $*
+run_simple_uefi_preset $*

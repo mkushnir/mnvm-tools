@@ -14,9 +14,5 @@ tag=ubuntu-18
 iso=ubuntu-18.04-server-amd64.iso
 idbase=${tag}.10@base
 
-#grubr=grub.conf-ubuntu-run
-#grubi=grub.conf-ubuntu-install
-
 . ./my-vmctl-preset-subr
 run_simple_uefi_preset $*
-#run_simple_linux_preset $*
