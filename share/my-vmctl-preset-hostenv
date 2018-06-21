@@ -6,6 +6,7 @@ then
     MY_VMCTL_HOSTNAME=localhost
     mnvm_net=10.1.2
 elif test "$MY_VMCTL_HOSTENV" = "skyrta"
+then
     #MY_VMCTL_DDEV_UFS=1
     #MY_VMCTL_HOSTNAME=localhost
     mnvm_net=10.1.3
