@@ -1,22 +1,11 @@
 #!/bin/sh
 
-#big
-#MY_VMCTL_DDEV_UFS=1
-mnvm_net=10.1.2
-#skyrta
-#mnvm_net=10.1.3
+#MY_VMCTL_HOSTENV=skyrta
+MY_VMCTL_HOSTENV=big
+. ./my-vmctl-preset-hostenv
 
-#set -x
-idx=$2
-test -n "$idx" || exit 1
-idx=$((16 + $idx))
-mnvm_node_id=$(( 100 + $idx ))
-
-tag=ubuntu-18
-#iso=ubuntu-18.04-desktop-amd64.iso
-#iso=ubuntu-18.04-server-amd64.iso
-iso=ubuntu-18.04-live-server-amd64.iso
-idbase=${tag}.10@base
+MY_VMCTL_PLATENV=ubuntu-18
+. ./my-vmctl-preset-platenv
 
 . ./my-vmctl-preset-subr
-run_simple_uefi_preset $*
+eval $mnvm_simple_preset $*

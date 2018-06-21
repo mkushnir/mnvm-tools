@@ -1,7 +1,12 @@
 #!/bin/sh
 
 my_hostname () {
-    host `hostname`|awk '{print $4;}'
+    if test -n "$MY_VMCTL_HOSTNAME"
+    then
+        host $MY_VMCTL_HOSTNAME | grep 'has address' | awk '{print $4;}'
+    else
+        host `hostname` | grep 'has address' | awk '{print $4;}'
+    fi
 }
 
 
@@ -117,7 +122,7 @@ run_simple_linux_preset () {
 
     if test "$1" = "install"
     then
-        var_required iso
+        var_required mnvm_iso
         _cmd=install-linux
         _ddev=`newvol $disk $size`
         if test -n "$grubi"
@@ -140,7 +145,7 @@ run_simple_linux_preset () {
             _g=
         fi
         _d=$_devmapr
-        iso=
+        mnvm_iso=
 
     elif test "$1" = "clone"
     then
@@ -155,7 +160,7 @@ run_simple_linux_preset () {
     _cdisk="$R/${disk}.cfg"
 
     cat > device.map-${id}.install <<EOD
-(cd0) $R/${iso}
+(cd0) $R/${mnvm_iso}
 (hd0) $D/${disk}
 (hd1) ${_cdisk}
 EOD
@@ -167,7 +172,7 @@ EOD
 EOD
 
     #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $_g $_d $iso "$_ddev|${_cdisk}" $mac $name $cdev
+    my-vmctl -M1 $B_opt $_cmd $_g $_d $mnvm_iso "$_ddev|${_cdisk}" $mac $name $cdev
 }
 
 
@@ -177,7 +182,7 @@ run_simple_freebsd_preset () {
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        var_required iso
+        var_required mnvm_iso
         _cmd=install
         _ddev=`newvol $disk $size`
 
@@ -185,7 +190,7 @@ run_simple_freebsd_preset () {
     then
         _cmd=run
         _ddev=`getvol $disk`
-        iso=
+        mnvm_iso=
 
     elif test "$1" = "clone"
     then
@@ -197,7 +202,7 @@ run_simple_freebsd_preset () {
         return 1
     fi
 
-    my-vmctl -M1 $B_opt $_cmd $iso $_ddev $mac $name $cdev
+    my-vmctl -M1 $B_opt $_cmd $mnvm_iso $_ddev $mac $name $cdev
 }
 
 
@@ -207,7 +212,7 @@ run_simple_windows_preset () {
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        var_required iso
+        var_required mnvm_iso
         _cmd=install-windows
         _ddev=`newvol $disk $size`
     elif test "$1" = "run"
@@ -219,7 +224,7 @@ run_simple_windows_preset () {
             fakeiso=.fakeiso-$name
         fi
         :> $fakeiso
-        iso=$fakeiso
+        mnvm_iso=$fakeiso
     else
         return 1
     fi
@@ -227,7 +232,7 @@ run_simple_windows_preset () {
     #export DEBUG=yes
     _hostname=`my_hostname`
     var_required _hostname
-    my-vmctl -M1 $B_opt $_cmd $bootrom $iso $mac $_ddev $_hostname $name 
+    my-vmctl -M1 $B_opt $_cmd $bootrom $mnvm_iso $mac $_ddev $_hostname $name 
 }
 
 
@@ -237,7 +242,7 @@ run_simple_uefi_preset () {
     my-vmctl destroy $name
     if test "$1" = "install"
     then
-        var_required iso
+        var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $disk $size`
         configure_linux
@@ -246,7 +251,7 @@ run_simple_uefi_preset () {
     then
         _cmd=run-uefi
         _ddev=`getvol $disk $size`
-        iso=
+        mnvm_iso=
 
     elif test "$1" = "clone"
     then
@@ -268,7 +273,7 @@ run_simple_uefi_preset () {
     #export DEBUG=yes
     _hostname=`my_hostname`
     var_required _hostname
-    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $cdev $_hostname $name
+    my-vmctl -M1 $B_opt $_cmd $mnvm_iso "$_ddev|${_cdisk}" $mac $cdev $_hostname $name
 }
 
 
@@ -464,15 +469,26 @@ fi
 
 # Required variables:
 #   idx, ordinal number
-#   tag, base/template image name like ubuntu-pear-16 or freebsd-pear-11
-var_required idx tag
-cdev="$idx"
-midx=`printf "%02x" $idx`
-idbase=${idbase:-${tag}@base}
-id=${tag}.${midx}
+#   mnvm_tag, base/template image name like ubuntu-pear-16 or freebsd-pear-11
+# prepare
+mnvm_idx=$2
+test -n "$mnvm_idx" || exit 1
+mnvm_idx=$(($mnvm_idx_offset + $mnvm_idx))
+mnvm_node_id=$(( 100 + $mnvm_idx ))
+
+offbase=`printf "%02x" $mnvm_idx_offset`
+idbase=${mnvm_tag}.${offbase}@base
+
+var_required mnvm_idx mnvm_tag
+
+# stage 1
+cdev="$mnvm_idx"
+midx=`printf "%02x" $mnvm_idx`
+idbase=${idbase:-${mnvm_tag}@base}
+id=${mnvm_tag}.${midx}
 name=vm-${id}
 size=32G
-cpu=$idx
+cpu=$mnvm_idx
 mac=58:9c:fc:ea:00:$midx
 disk=.diskdev-${id}
 diskbase=.diskdev-${idbase}

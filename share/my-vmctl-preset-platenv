@@ -1,0 +1,30 @@
+#!/bin/sh
+
+if test "$MY_VMCTL_PLATENV" = "ubuntu-18"
+then
+    mnvm_idx_offset=16
+    mnvm_tag=ubuntu-18
+    #mnvm_iso=ubuntu-18.04-desktop-amd64.iso
+    #mnvm_iso=ubuntu-18.04-server-amd64.iso
+    mnvm_iso=ubuntu-18.04-live-server-amd64.iso
+    mnvm_simple_preset=run_simple_uefi_preset
+
+elif test "$MY_VMCTL_PLATENV" = "centos-7"
+then
+    mnvm_idx_offset=32
+    mnvm_tag=centos-7
+    #mnvm_iso=CentOS-7-x86_64-Everything-1708.iso
+    #mnvm_iso=CentOS-7-x86_64-Minimal-1804.iso
+    mnvm_iso=CentOS-7-x86_64-Everything-1804.iso
+    mnvm_simple_preset=run_simple_uefi_preset
+
+elif test "$MY_VMCTL_PLATENV" = "freebsd-11"
+then
+    mnvm_idx_offset=0
+    mnvm_tag=freebsd-11
+    mnvm_iso=FreeBSD-11.1-RELEASE-amd64-bootonly.iso
+    mnvm_simple_preset=run_simple_freebsd_preset
+else
+    echo MY_VMCTL_PLATENV is not set
+    exit 1;
+fi
