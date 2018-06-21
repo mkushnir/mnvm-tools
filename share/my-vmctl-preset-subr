@@ -381,6 +381,9 @@ iface $_ifname inet static
 EOD
 
     cat <<EOD >/mnt/etc/netplan/01-netcfg.yaml
+# crontab -e
+# @reboot /usr/sbin/netplan apply
+# @reboot /bin/hostname -F /etc/hostname
 network:
     version: 2
     renderer: networkd
