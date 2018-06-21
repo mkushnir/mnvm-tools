@@ -1,7 +1,10 @@
 #!/bin/sh
 
-MY_VMCTL_DDEV_UFS=1
-mnvm_net=10.1.2
+#big
+#MY_VMCTL_DDEV_UFS=1
+#mnvm_net=10.1.2
+#skyrta
+mnvm_net=10.1.3
 
 #set -x
 idx=$2
@@ -10,7 +13,9 @@ idx=$((32 + $idx))
 mnvm_node_id=$(( 100 + $idx ))
 
 tag=centos-7
-iso=CentOS-7-x86_64-Everything-1708.iso
+#iso=CentOS-7-x86_64-Everything-1708.iso
+#iso=CentOS-7-x86_64-Minimal-1804.iso
+iso=CentOS-7-x86_64-Everything-1804.iso
 idbase=${tag}.20@base
 
 . ./my-vmctl-preset-subr

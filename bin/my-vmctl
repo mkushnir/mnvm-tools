@@ -9,8 +9,8 @@ usage() {
     echo "    stop-iface"
     echo "    install distro disk[:disk] mac vmname"
     echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk[:disk] mac vmname"
-    echo "    install-windows bootrom distro disk[:disk] mac cdev vmname"
-    echo "    install-uefi distro disk[:disk] mac cdev vmname"
+    echo "    install-windows bootrom distro disk[:disk] mac cdev hostname vmname"
+    echo "    install-uefi distro disk[:disk] mac cdev hostname vmname"
     echo "    run disk[:disk] mac vmname"
     echo "    list"
     echo "    list-images"
@@ -18,10 +18,10 @@ usage() {
     echo "    destroy vmanme"
     echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
-    echo "    run-windows bootrom disk[:disk] mac cdev vmname"
-    echo "    run-uefi disk[:disk] mac cdev vmname"
+    echo "    run-windows bootrom disk[:disk] mac cdev hostname vmname"
+    echo "    run-uefi disk[:disk] mac cdev hostname vmname"
     echo "    check"
-    echo "    connect"
+    echo "    connect cdev [ hostname ]"
     echo "    send-script script"
     echo
     echo " special commands (require altroot setup/teardown):"
@@ -182,7 +182,7 @@ _checkfstat() {
 
 _start_ifaces() {
     local i _tap
-    for i in if_tap vmm nmdm
+    for i in if_tap vmm nmdm fuse ext2fs
     do
         if ! kldstat -q -m $i
         then
@@ -226,7 +226,7 @@ _stop_ifaces() {
     sysctl net.link.tap.user_open=0
     sysctl net.link.tap.up_on_open=0
 
-    for i in if_tap nmdm #vmm
+    for i in if_tap nmdm #vmm fuse ext2fs
     do
         if kldstat -q -m $i
         then
@@ -347,17 +347,18 @@ _install_linux() {
 
 
 _install_windows() {
-    local _bootrom _distro _disk _mac _cdev _fbuf _vmname _answer _tap
+    local _bootrom _distro _disk _mac _cdev _hostname _fbuf _vmname _answer _tap
 
     _bootrom=$1
     _distro=$2
     _disk=$3
     _mac=$4
     _cdev=$5
-    _vmname=$6
+    _hostname=$6
+    _vmname=$7
 
     var_required _bootrom _distro _disk _mac _cdev _vmname
-    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768,wait"
 
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
@@ -391,16 +392,17 @@ _install_windows() {
 
 
 _install_uefi() {
-    local _distro _disk _mac _cdev _fbuf _vmname _answer _tap _bootrom
+    local _distro _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
 
     _distro=$1
     _disk=$2
     _mac=$3
     _cdev=$4
-    _vmname=$5
+    _hostname=$5
+    _vmname=$6
 
     var_required _distro _disk _mac _cdev _vmname
-    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768,wait"
 
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
@@ -512,17 +514,18 @@ _run_linux() {
 
 
 _run_windows() {
-    local _bootrom _distro _disk _tap _mac _cdev _fbuf _vmname _answer
+    local _bootrom _distro _disk _tap _mac _cdev _hostname _fbuf _vmname _answer
 
     _bootrom=$1
     _distro=$2
     _disk=$3
     _mac=$4
     _cdev=$5
-    _vmname=$6
+    _hostname=$6
+    _vmname=$7
 
     var_required _bootrom _distro _disk _mac _cdev _vmname
-    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768"
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768"
     file_required $_bootrom
 
     if ls /dev/vmm/${_vmname} 2>/dev/null
@@ -557,15 +560,16 @@ _run_windows() {
 
 
 _run_uefi() {
-    local _disk _mac _cdev _fbuf _vmname _answer _tap _bootrom
+    local _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
 
     _disk=$1
     _mac=$2
     _cdev=$3
-    _vmname=$4
+    _hostname=$4
+    _vmname=$5
 
     var_required _disk _mac _cdev _vmname
-    _fbuf="tcp=10.1.1.10:$(( 5900 + $_cdev )),w=1024,h=768"
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768"
 
     if ls /dev/vmm/${_vmname} 2>/dev/null
     then
@@ -893,11 +897,11 @@ then
 elif test "$1" = "install-uefi"
 then
     shift
-    _install_uefi $1 $2 $3 $4 $5
+    _install_uefi $1 $2 $3 $4 $5 $6
 
 elif test "$1" = "install-windows"
 then
-    _install_windows $2 $3 $4 $5 $6 $7
+    _install_windows $2 $3 $4 $5 $6 $7 $8
 
 elif test "$1" = "run"
 then
@@ -971,12 +975,12 @@ then
 
 elif test "$1" = "run-windows"
 then
-    _run_windows $2 $3 $4 $5 $6 $7
+    _run_windows $2 $3 $4 $5 $6 $7 $8
 
 elif test "$1" = "run-uefi"
 then
     shift
-    _run_uefi $1 $2 $3 $4
+    _run_uefi $1 $2 $3 $4 $5
 
 elif test "$1" = "runalt"
 then
@@ -1056,7 +1060,14 @@ then
         _cdev=$2
     fi
 
-    addr="10.1.1.10:$(( 5900 + $_cdev ))"
+    if test -z "$3"
+    then
+        _hostname=10.1.1.10
+    else
+        _hostname=$3
+    fi
+
+    addr="${_hostname}:$(( 5900 + $_cdev ))"
     if sockstat -l | grep -q $addr
     then
         vncviewer $addr

@@ -1,5 +1,10 @@
 #!/bin/sh
 
+my_hostname () {
+    host `hostname`|awk '{print $4;}'
+}
+
+
 var_required () {
     local _old_e
     _old_e=`set +o | grep errexit`
@@ -197,7 +202,7 @@ run_simple_freebsd_preset () {
 
 
 run_simple_windows_preset () {
-    local _cmd _ddev
+    local _cmd _ddev _hostname
 
     my-vmctl destroy $name
     if test "$1" = "install"
@@ -220,11 +225,15 @@ run_simple_windows_preset () {
     fi
 
     #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $bootrom $iso $_ddev $mac $name 
+    _hostname=`my_hostname`
+    var_required _hostname
+    my-vmctl -M1 $B_opt $_cmd $bootrom $iso $mac $_ddev $_hostname $name 
 }
 
 
 run_simple_uefi_preset () {
+    local _cmd _ddev _cdisk _hostname
+
     my-vmctl destroy $name
     if test "$1" = "install"
     then
@@ -257,12 +266,14 @@ run_simple_uefi_preset () {
     _cdisk="$R/${disk}.cfg"
 
     #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $cdev $name
+    _hostname=`my_hostname`
+    var_required _hostname
+    my-vmctl -M1 $B_opt $_cmd $iso "$_ddev|${_cdisk}" $mac $cdev $_hostname $name
 }
 
 
 clone_zfs_dataset () {
-    local _ddevbase _ddev _rootvol _hostname _ip4
+    local _ddevbase _ddev
 
     _ddevbase=`getdataset $diskbase`
     _ddev=`getdataset $disk`
@@ -324,9 +335,30 @@ configure_linux () {
 
     _cdisk="$R/${disk}.cfg"
     rm -f ${_cdisk}
-    newfs_msdos -C16M -F16 ${_cdisk}
-    _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
-    mount_msdosfs /dev/${_mdev} /mnt
+
+    if test -n "$MY_VMCTL_CFG_NTFS3G"
+    then
+        prog_required mkntfs ntfs-3g
+
+        truncate -s 16M ${_cdisk}
+        mkntfs ${_cdisk}
+        _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
+        ntfs-3g /dev/${_mdev} /mnt
+
+    elif test -n "$MY_VMCTL_CFG_MSDOS"
+    then
+        newfs_msdos -S 512 -c 1 -C 33M -F 32 ${_cdisk}
+        _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
+        mount_msdosfs /dev/${_mdev} /mnt
+
+    else
+        prog_required mkfs.ext2
+
+        truncate -s 16M ${_cdisk}
+        mkfs.ext2 ${_cdisk}
+        _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
+        mount -t ext2fs /dev/${_mdev} /mnt
+    fi
 
     mkdir -p /mnt/etc/network/ /mnt/etc/netplan/ /mnt/etc/sysconfig/network-scripts
     cat <<EOD >/mnt/etc/network/interfaces
@@ -387,6 +419,7 @@ EOD
     echo ${_hostname} > /mnt/etc/hostname
     echo "HOSTANME=${_hostname}" > /mnt/etc/sysconfig/network
 
+    #find /mnt -ls
     umount /mnt
     mdconfig -d -u ${_mdev}
 
