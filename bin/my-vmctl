@@ -601,45 +601,64 @@ _run_uefi() {
 
 
 _runalt() {
-    local rootmount bootdev _tap dev _mac
+    local _rootmount _disk _tap _bootrom _mac _fbuf _vmname _answer
 
-    dev=$1
-    _mac=$2
+    _mac=$1
 
     var_required _mac
+
+    _vmname=altroot
 
     if ! ifconfig -l | grep -E -q 'bridge0'
     then
         echo "interfaces are not st up"
         exit 1
     fi
-    if mount -p | awk '{print $2;}' | grep -q altroot
+    if mount -p | awk '{print $2;}' | grep -q ${_vmname}
     then
-        echo "Please umount all altroot systems"
+        echo "Please umount all ${_vmname} systems"
         exit 1
     fi
-    if test -z "$dev"
+
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    file_required $_bootrom
+
+    _rootmount="`mount -p | awk '{print $1, $2;}' | grep '/$' | awk '{print $1;}'`"
+    var_required _rootmount
+    if test "$_rootmount" = "/dev/gpt/root-wd1000"
     then
-        rootmount="`mount -p | awk '{print $1, $2;}' | grep '/$' | awk '{print $1;}'`"
-        var_required rootmount
-        if test "$rootmount" = "/dev/gpt/root-wd1000"
-        then
-            # we are wd1000, so boot from wd1001
-            bootdev=/dev/ada1
-        elif test "$rootmount" = "/dev/gpt/root-wd1001"
-        then
-            # we are wd1001, so boot from wd1000
-            bootdev=/dev/ada0
-        else
-            echo "Failed to find altroot mount device"
-            exit 1
-        fi
+        # we are wd1000, so boot from wd1001
+        _disk=/dev/ada1
+    elif test "$_rootmount" = "/dev/gpt/root-wd1001"
+    then
+        # we are wd1001, so boot from wd1000
+        _disk=/dev/ada0
     else
-        bootdev=$dev
+        echo "Failed to find ${_vmname} mount device"
+        exit 1
     fi
-    mybhyve_opts="$mybhyve_opts -A -M4"
+
+    _fbuf="tcp=localhost:5900,w=800,h=600,wait"
     _tap=`_pick_tap`
-    _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d $bootdev altroot"
+
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        mybhyve_opts="${mybhyve_opts} -B"
+        # hardcode uefi
+        mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+        mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+        mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
+        mybhyve_opts="$mybhyve_opts -A -M4"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
 }
 
 
@@ -990,7 +1009,7 @@ then
 
 elif test "$1" = "runalt"
 then
-    _runalt "" 58:9c:fc:00:00:96
+    _runalt 58:9c:fc:00:00:96
 
 elif test "$1" = "poweroffalt"
 then
