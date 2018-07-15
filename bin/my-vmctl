@@ -226,11 +226,12 @@ _stop_ifaces() {
     sysctl net.link.tap.user_open=0
     sysctl net.link.tap.up_on_open=0
 
-    for i in if_tap nmdm #vmm fuse ext2fs
+    #vmm fuse ext2fs
+    for i in if_tap nmdm
     do
         if kldstat -q -m $i
         then
-            kldunload $i
+            kldunload $i || true
         fi
     done
 }
@@ -735,9 +736,15 @@ _linkalt() {
     altrootdev="`_rootdev`"
     if test -z "$altrootdev"
     then
+        _mountalt
+    fi
+    altrootdev="`_rootdev`"
+    if test -z "$altrootdev"
+    then
         echo "Something wrong with the /altroot mount. You might want to run $0 mountalt"
         exit 1
     fi
+
     if test "${_arg}" = "vm"
     then
         rm -f /altroot/etc/rc.conf
