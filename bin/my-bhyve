@@ -110,7 +110,7 @@ busid=0
 basic_pci_opt="-s ${busid}:0,hostbridge"
 busid=$(( busid + 1 ))
 
-args=`getopt Ab:Bc:C:d:D:E:g:G:hiI:l:L:M:nN:p:P:u: $*`
+args=`getopt Ab:Bc:C:d:D:E:g:G:hiI:l:L:m:M:nN:p:P:u: $*`
 if test $? -ne 0
 then
     exit 1
@@ -241,6 +241,12 @@ do
             shift
         ;;
 
+        -m)
+            shift
+            memsz=$1
+            shift
+        ;;
+
         -M)
             shift
             mcpu_opt=$1
@@ -298,12 +304,6 @@ name=$1
 
 basic_pci_opt="$basic_pci_opt -s 31:0,lpc"
 cons_opt="-l com1,$consdev"
-
-if test -n "$mcpu_opt" -a -n "$pinnedcpu_opt"
-then
-    echo "Cannot accept both -M and -P"
-    exit 1
-fi
 
 if test -z "$pinnedcpu_opt"
 then

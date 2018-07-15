@@ -2,7 +2,7 @@
 
 usage() {
     echo "Usage:"
-    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -M num ] [ -n ] [ -P num ]"
+    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ]"
     echo "    setup [altroot]"
     echo "    teardown [altroot]"
     echo "    start-iface"
@@ -790,7 +790,7 @@ dryrun=
 mybhyve_opts='-u3'
 disk_switch=-d
 
-args=`getopt bE:iM:nP: $*`
+args=`getopt bE:im:M:nP: $*`
 if test $? -ne 0
 then
     exit 1
@@ -814,6 +814,12 @@ do
             shift
             batch=
             mybhyve_opts="$mybhyve_opts -i"
+        ;;
+
+        -m)
+            shift
+            mybhyve_opts="$mybhyve_opts -m $1"
+            shift
         ;;
 
         -M)
