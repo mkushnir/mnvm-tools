@@ -1,6 +1,11 @@
 #!/bin/sh
 
-my_hostname () {
+usage () {
+    echo "Usage: `basename $0` [ install | run | clone | base | configure ] IDX"
+}
+
+
+my_hostaddr () {
     if test -n "$MY_VMCTL_HOSTNAME"
     then
         host $MY_VMCTL_HOSTNAME | grep 'has address' | awk '{print $4;}'
@@ -79,27 +84,10 @@ prog_required () {
 }
 
 
-newvol () {
-    local _dataset _vol _name _size
-    _name=$1
-    _size=$2
-    _vol=$D/$_name
-    if test -n "$_zfs"
-    then
-        _dataset=$P/$_name
-        zfs destroy $_dataset
-        zfs create -V $_size $_dataset
-    else
-        rm -f $_vol && truncate -s $_size $_vol
-    fi
-    echo $_vol
-}
-
-
 getvol () {
     local _vol _name
     _name=$1
-    _vol=$D/$_name
+    _vol=$MY_VMCTL_DISK/$_name
     echo $_vol
 }
 
@@ -107,209 +95,125 @@ getvol () {
 getdataset () {
     local _dataset _name
     _name=$1
-    _dataset=$P/$_name
+    _dataset=$MY_VMCTL_POOL/$_name
     echo $_dataset
 }
 
 
-run_simple_linux_preset () {
-    local _cmd _d _g _ddev _devmapi _devmapr _cdisk
-
-    my-vmctl destroy $name
-
-    _devmapi=device.map-${id}.install
-    _devmapr=device.map-${id}.run
-
-    if test "$1" = "install"
+newvol () {
+    local _name _size _vol
+    _name=$1
+    _size=$2
+    if test -n "$_zfs"
     then
-        var_required mnvm_iso
-        _cmd=install-linux
-        _ddev=`newvol $disk $size`
-        if test -n "$grubi"
-        then
-            _g="-G $grubi"
-        else
-            _g=
-        fi
-        _d=$_devmapi
-        configure_linux
-
-    elif test "$1" = "run"
-    then
-        _cmd=run-linux
-        _ddev=`getvol $disk`
-        if test -n "$grubr"
-        then
-            _g="-G $grubr"
-        else
-            _g=
-        fi
-        _d=$_devmapr
-        mnvm_iso=
-
-    elif test "$1" = "clone"
-    then
-        clone_zfs_dataset
-        configure_linux
-        return $?
-
+        _vol=`getdataset $_name`
+        zfs destroy $_vol
+        zfs create -V $_size $_vol
     else
-        return 1
+        _vol=`getvol $_name`
+        rm -f $_vol
+        truncate -s $_size $_vol
     fi
-
-    _cdisk="$R/${disk}.cfg"
-
-    cat > device.map-${id}.install <<EOD
-(cd0) $R/${mnvm_iso}
-(hd0) $D/${disk}
-(hd1) ${_cdisk}
-EOD
-
-    cat > device.map-${id}.run <<EOD
-(cd0) /fake
-(hd0) $D/${disk}
-(hd1) ${_cdisk}
-EOD
-
-    #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $_g $_d $mnvm_iso "$_ddev|${_cdisk}" $mac $name $cdev
+    echo $_vol
 }
 
 
-run_simple_freebsd_preset () {
-    local _cmd _ddev
-
-    my-vmctl destroy $name
-    if test "$1" = "install"
-    then
-        var_required mnvm_iso
-        _cmd=install
-        _ddev=`newvol $disk $size`
-
-    elif test "$1" = "run"
-    then
-        _cmd=run
-        _ddev=`getvol $disk`
-        mnvm_iso=
-
-    elif test "$1" = "clone"
-    then
-        clone_zfs_dataset
-        configure_freebsd
-        return $?
-
-    else
-        return 1
-    fi
-
-    my-vmctl -M1 $B_opt $_cmd $mnvm_iso $_ddev $mac $name $cdev
-}
-
-
-run_simple_windows_preset () {
-    local _cmd _ddev _hostname
-
-    my-vmctl destroy $name
-    if test "$1" = "install"
-    then
-        var_required mnvm_iso
-        _cmd=install-windows
-        _ddev=`newvol $disk $size`
-    elif test "$1" = "run"
-    then
-        _cmd=run-windows
-        _ddev=`getvol $disk $size`
-        if test -z "$fakeiso"
-        then
-            fakeiso=.fakeiso-$name
-        fi
-        :> $fakeiso
-        mnvm_iso=$fakeiso
-    else
-        return 1
-    fi
-
-    #export DEBUG=yes
-    _hostname=`my_hostname`
-    var_required _hostname
-    my-vmctl -M1 $B_opt $_cmd $bootrom $mnvm_iso $mac $_ddev $_hostname $name 
-}
-
-
-run_simple_uefi_preset () {
-    local _cmd _ddev _cdisk _hostname
-
-    my-vmctl destroy $name
-    if test "$1" = "install"
-    then
-        var_required mnvm_iso
-        _cmd=install-uefi
-        _ddev=`newvol $disk $size`
-        configure_linux
-
-    elif test "$1" = "run"
-    then
-        _cmd=run-uefi
-        _ddev=`getvol $disk $size`
-        mnvm_iso=
-
-    elif test "$1" = "clone"
-    then
-        clone_zfs_dataset
-        configure_linux
-        return $?
-
-    elif test "$1" = "configure"
-    then
-        configure_linux
-        return $?
-
-    else
-        return 1
-    fi
-
-    _cdisk="$R/${disk}.cfg"
-
-    #export DEBUG=yes
-    _hostname=`my_hostname`
-    var_required _hostname
-    my-vmctl -M1 $B_opt $_cmd $mnvm_iso "$_ddev|${_cdisk}" $mac $cdev $_hostname $name
-}
-
-
-clone_zfs_dataset () {
+clone_dataset () {
     local _ddevbase _ddev
 
-    _ddevbase=`getdataset $diskbase`
-    _ddev=`getdataset $disk`
-
-    if ! zfs list "${_ddevbase}" >/dev/null 2>&1
+    if test ${mnvm_template_idx} -eq ${mnvm_idx}
     then
-        echo "Invalid snapshot ${_ddevbase}"
+        echo "ERROR: Cannot clone template ${mnvm_template_idx} into itself.  Exiting ..."
         exit 1
     fi
-    if zfs list "${_ddev}" >/dev/null 2>&1
+
+    if test -n "${_zfs}"
     then
-        if test -z "$force"
+        _ddevbase=`getdataset $mnvm_diskbase`
+        _ddev=`getdataset $mnvm_disk`
+
+        var_required _ddevbase _ddev
+
+        if ! zfs list "${_ddevbase}" >/dev/null 2>&1
         then
-            echo "Already exists ${_ddev}. Set force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+            echo "Invalid snapshot ${_ddevbase}"
             exit 1
-        else
-            zfs destroy ${_ddev}
         fi
+        if zfs list "${_ddev}" >/dev/null 2>&1
+        then
+            if test -z "$mnvm_force"
+            then
+                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+                exit 1
+            else
+                zfs destroy ${_ddev}
+            fi
+        fi
+        zfs clone ${_ddevbase} ${_ddev}
+
+    else
+        _ddevbase=`getvol $mnvm_diskbase`
+        _ddev=`getvol $mnvm_disk`
+
+        var_required _ddevbase _ddev
+
+        if ! test -f ${_ddevbase}
+        then
+            echo "Invalid snapshot ${_ddevbase}"
+            exit 1
+        fi
+        if test -f "${_ddev}"
+        then
+            if test -z "$mnvm_force"
+            then
+                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+                exit 1
+            else
+                rm -f -v ${_ddev}
+            fi
+        fi
+        cp -f -v ${_ddevbase} ${_ddev}
     fi
-    zfs clone ${_ddevbase} ${_ddev}
+}
+
+
+base_dataset() {
+    local _ddev _ddevbase
+
+    if test -n "${_zfs}"
+    then
+        _ddevbase=`getdataset $mnvm_diskbase`
+
+        var_required _ddevbase
+
+        zfs snapshot ${_ddevbase}
+
+    else
+        _ddev=`getvol $mnvm_disk`
+        _ddevbase=`getvol $mnvm_diskbase`
+
+        var_required _ddevbase _ddev
+
+        rm -f -v ${_ddevbase}
+        ln ${_ddev} ${_ddevbase}
+    fi
 }
 
 
 configure_freebsd () {
-    local _vol _rootvol
+    local _vol _rootvol _mdev
 
     var_required mnvm_net mnvm_node_id
 
-    _vol=`getvol $disk`
+    _vol=`getvol $mnvm_disk`
     # GPT partitioning scheme assumed (bsdinstall option)
-    _rootvol="${_vol}p2"
+    if test -n "${_zfs}"
+    then
+        _rootvol="${_vol}p2"
+    else
+        _mdev=`mdconfig -a -t vnode -f ${_vol}`
+        _rootvol="/dev/${_mdev}p2"
+    fi
     cdev_required ${_rootvol}
     mount $_rootvol /mnt
     sed -E \
@@ -317,6 +221,10 @@ configure_freebsd () {
         -e "s/^mnvm_net=.*$/mnvm_net=$mnvm_net/" \
         -i.bak /mnt/etc/rc.conf
     umount /mnt
+    if test -n "${_mdev}"
+    then
+        mdconfig -d -u ${_mdev}
+    fi
 }
 
 
@@ -338,7 +246,7 @@ configure_linux () {
     _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
     var_required _hostname
 
-    _cdisk="$R/${disk}.cfg"
+    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
     rm -f ${_cdisk}
 
     if test -n "$MY_VMCTL_CFG_NTFS3G"
@@ -439,8 +347,205 @@ EOD
     #    -e "s/^__secure__:password$/__secure__:$_passwd/" \
     #        <my-vmctl-preset-config-ubuntu \
     #        > .my-vmctl-preset-config-ubuntu-tmp
-    #my-vmctl send-script $cdev .my-vmctl-preset-config-ubuntu-tmp
+    #my-vmctl send-script $mnvm_cdev .my-vmctl-preset-config-ubuntu-tmp
     #rm .my-vmctl-preset-config-ubuntu-tmp
+}
+
+
+run_simple_linux_preset () {
+    local _cmd _d _g _ddev _devmapi _devmapr _cdisk
+
+    my-vmctl destroy $mnvm_name
+
+    _devmapi=device.map-${mnvm_id}.install
+    _devmapr=device.map-${mnvm_id}.run
+
+    if test "$1" = "install"
+    then
+        var_required mnvm_iso
+        _cmd=install-linux
+        _ddev=`newvol $mnvm_disk $mnvm_size`
+        if test -n "$grubi"
+        then
+            _g="-G $grubi"
+        else
+            _g=
+        fi
+        _d=$_devmapi
+        configure_linux
+
+    elif test "$1" = "run"
+    then
+        _cmd=run-linux
+        _ddev=`getvol $mnvm_disk`
+        if test -n "$grubr"
+        then
+            _g="-G $grubr"
+        else
+            _g=
+        fi
+        _d=$_devmapr
+        mnvm_iso=
+
+    elif test "$1" = "clone"
+    then
+        clone_dataset
+        configure_linux
+        return $?
+
+    elif test "$1" = "base"
+    then
+        base_dataset
+        return $?
+
+    elif test "$1" = "configure"
+    then
+        configure_linux
+        return $?
+
+    else
+        usage
+        return 1
+    fi
+
+    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
+
+    cat > device.map-${mnvm_id}.install <<EOD
+(cd0) $MY_VMCTL_ROOT/${mnvm_iso}
+(hd0) $MY_VMCTL_DISK/${mnvm_disk}
+(hd1) ${_cdisk}
+EOD
+
+    cat > device.map-${mnvm_id}.run <<EOD
+(cd0) /fake
+(hd0) $MY_VMCTL_DISK/${mnvm_disk}
+(hd1) ${_cdisk}
+EOD
+
+    #export DEBUG=yes
+    my-vmctl -M1 $B_opt $_cmd $_g $_d $mnvm_iso "$_ddev|${_cdisk}" $mnvm_mac $mnvm_name $mnvm_cdev
+}
+
+
+run_simple_freebsd_preset () {
+    local _cmd _ddev _hostaddr
+
+    my-vmctl destroy $mnvm_name
+    if test "$1" = "install"
+    then
+        var_required mnvm_iso
+        _cmd=install-uefi
+        _ddev=`newvol $mnvm_disk $mnvm_size`
+
+    elif test "$1" = "run"
+    then
+        _cmd=run-uefi
+        _ddev=`getvol $mnvm_disk`
+        mnvm_iso=
+
+    elif test "$1" = "clone"
+    then
+        clone_dataset
+        configure_freebsd
+        return $?
+
+    elif test "$1" = "base"
+    then
+        base_dataset
+        return $?
+
+    elif test "$1" = "configure"
+    then
+        configure_freebsd
+        return $?
+
+    else
+        usage
+        return 1
+    fi
+
+    _hostaddr=`my_hostaddr`
+    var_required _hostaddr
+    my-vmctl -M1 $B_opt $_cmd $mnvm_iso $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
+}
+
+
+run_simple_windows_preset () {
+    local _cmd _ddev _hostaddr
+
+    my-vmctl destroy $mnvm_name
+    if test "$1" = "install"
+    then
+        var_required mnvm_iso
+        _cmd=install-windows
+        _ddev=`newvol $mnvm_disk $mnvm_size`
+    elif test "$1" = "run"
+    then
+        _cmd=run-windows
+        _ddev=`getvol $mnvm_disk $mnvm_size`
+        if test -z "$fakeiso"
+        then
+            fakeiso=.fakeiso-$mnvm_name
+        fi
+        :> $fakeiso
+        mnvm_iso=$fakeiso
+
+    else
+        usage
+        return 1
+    fi
+
+    #export DEBUG=yes
+    _hostaddr=`my_hostaddr`
+    var_required _hostaddr
+    my-vmctl -M1 $B_opt $_cmd $bootrom $mnvm_iso $mnvm_mac $_ddev $_hostaddr $mnvm_name 
+}
+
+
+run_simple_uefi_preset () {
+    local _cmd _ddev _cdisk _hostaddr
+
+    my-vmctl destroy $mnvm_name
+    if test "$1" = "install"
+    then
+        var_required mnvm_iso
+        _cmd=install-uefi
+        _ddev=`newvol $mnvm_disk $mnvm_size`
+        configure_linux
+
+    elif test "$1" = "run"
+    then
+        _cmd=run-uefi
+        _ddev=`getvol $mnvm_disk $mnvm_size`
+        mnvm_iso=
+
+    elif test "$1" = "clone"
+    then
+        clone_dataset
+        configure_linux
+        return $?
+
+    elif test "$1" = "base"
+    then
+        base_dataset
+        return $?
+
+    elif test "$1" = "configure"
+    then
+        configure_linux
+        return $?
+
+    else
+        usage
+        return 1
+    fi
+
+    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
+
+    #export DEBUG=yes
+    _hostaddr=`my_hostaddr`
+    var_required _hostaddr
+    my-vmctl -M1 $B_opt $_cmd $mnvm_iso "$_ddev|${_cdisk}" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
 
@@ -448,25 +553,21 @@ EOD
 
 _zfs=
 # pool: for zfs hosting
-P=
+# MY_VMCTL_POOL=
 # root dir: for ISO images
-R=
+# MY_VMCTL_ROOT=
 # dev dir: for disk devices
-D=
+# MY_VMCTL_DISK=
 B_opt=
 if zpool list >/dev/null 2>&1
 then
-    if test -z "$MY_VMCTL_DDEV_UFS"
+    if test -n "$MY_VMCTL_DDEV_ZFS"
     then
         _zfs=1
-        # my pear. hosting
-        P=skyrta
-        R=/$P/vm
-        D=/dev/zvol/$P
         B_opt=-b
+        var_required MY_VMCTL_POOL MY_VMCTL_ROOT MY_VMCTL_DISK
     else
-        R="`pwd`"
-        D="`pwd`"
+        var_required MY_VMCTL_ROOT MY_VMCTL_DISK
     fi
 fi
 
@@ -475,23 +576,26 @@ fi
 #   mnvm_tag, base/template image name like ubuntu-pear-16 or freebsd-pear-11
 # prepare
 mnvm_idx=$2
-test -n "$mnvm_idx" || exit 1
+mnvm_template_idx=$3
+: ${mnvm_idx:=0}
+: ${mnvm_template_idx:=0}
 mnvm_idx=$(($mnvm_idx_offset + $mnvm_idx))
 mnvm_node_id=$(( 100 + $mnvm_idx ))
 
-offbase=`printf "%02x" $mnvm_idx_offset`
-idbase=${mnvm_tag}.${offbase}@base
-
+mnvm_template_idx=$(($mnvm_idx_offset + $mnvm_template_idx))
+mnvm_template_node_id=$(( 100 + $mnvm_template_idx ))
 var_required mnvm_idx mnvm_tag
 
 # stage 1
-cdev="$mnvm_idx"
+mnvm_cdev="$mnvm_idx"
 midx=`printf "%02x" $mnvm_idx`
-idbase=${idbase:-${mnvm_tag}@base}
-id=${mnvm_tag}.${midx}
-name=vm-${id}
-size=32G
-cpu=$mnvm_idx
-mac=58:9c:fc:ea:00:$midx
-disk=.diskdev-${id}
-diskbase=.diskdev-${idbase}
+mnvm_id=${mnvm_tag}.${midx}
+template_midx=`printf "%02x" $mnvm_template_idx`
+mnvm_template_id=${mnvm_tag}.${template_midx}
+mnvm_name=vm-${mnvm_id}
+idbase=${idbase:-${mnvm_template_id}@base}
+mnvm_size=${mnvm_size:-'32G'}
+mnvm_cpu=$mnvm_idx
+mnvm_mac=58:9c:fc:ea:00:$midx
+mnvm_disk=.diskdev-${mnvm_id}
+mnvm_diskbase=.diskdev-${idbase}

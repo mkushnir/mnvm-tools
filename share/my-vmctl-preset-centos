@@ -7,5 +7,6 @@ MY_VMCTL_HOSTENV=big
 MY_VMCTL_PLATENV=centos-7
 . ./my-vmctl-preset-platenv
 
+mnvm_size=64G
 . ./my-vmctl-preset-subr
 eval $mnvm_simple_preset $*
