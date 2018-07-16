@@ -602,8 +602,9 @@ _run_uefi() {
 
 
 _runalt() {
-    local _rootmount _disk _tap _bootrom _mac _fbuf _vmname _answer
+    local _rootmount _disk _tap _bootrom _mac _boottype _ctype _cdev _fbuf _vmname _answer
 
+    _boottype=uefi
     _mac=$1
 
     var_required _mac
@@ -639,24 +640,41 @@ _runalt() {
         exit 1
     fi
 
-    _fbuf="tcp=localhost:5900,w=800,h=600,wait"
+    if test "$_boottype" = "uefi"
+    then
+        _fbuf="tcp=localhost:5900,w=800,h=600,wait"
+        _ctype="fbuf: ${_fbuf}"
+        _disk="/boot/boot1.efifat|${_disk}"
+    else
+        _cdev="/dev/nmdm0A"
+        _ctype="console: $_cdev"
+    fi
     _tap=`_pick_tap`
 
     echo "disk: ${_disk}"
     echo "tap: ${_tap}"
     echo "mac: ${_mac}"
-    echo "fbuf: ${_fbuf}"
+    echo "${_ctype}"
+    #echo "fbuf: ${_fbuf}"
+    #echo "console: $_cdev"
     echo "vmname: ${_vmname}"
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        mybhyve_opts="${mybhyve_opts} -B"
-        # hardcode uefi
-        mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
-        mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
-        mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
+        if test "${_boottype}" = "uefi"
+        then
+            # hardcode uefi
+            mybhyve_opts="${mybhyve_opts} -B"
+            mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+            mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+            mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
+        else
+            mybhyve_opts="$mybhyve_opts -c $_cdev"
+        fi
+
+        local _diskopt="`_split $disk_switch ${_disk}`"
         mybhyve_opts="$mybhyve_opts -A -M4"
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -d ${_disk} ${_vmname}"
+        _do_it "my-bhyve $mybhyve_opts ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
