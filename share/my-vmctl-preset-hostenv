@@ -3,15 +3,17 @@
 if test "$MY_VMCTL_HOSTENV" = "big"
 then
     #MY_VMCTL_DDEV_ZFS=
-    MY_VMCTL_ROOT=/data0/mkushnir/vm
-    MY_VMCTL_DISK=/data0/mkushnir/vm
+    MY_VMCTL_ISO=/data0/mkushnir/vm/iso
+    MY_VMCTL_CFG=/data0/mkushnir/vm/diskdev
+    MY_VMCTL_DISK=/data0/mkushnir/vm/diskdev
     MY_VMCTL_HOSTNAME=localhost
     mnvm_net=10.1.2
 elif test "$MY_VMCTL_HOSTENV" = "skyrta"
 then
     MY_VMCTL_DDEV_ZFS=1
     MY_VMCTL_POOL=skyrta
-    MY_VMCTL_ROOT=/$MY_VMCTL_POOL/vm
+    MY_VMCTL_ISO=/$MY_VMCTL_POOL/vm/iso
+    MY_VMCTL_CFG=/$MY_VMCTL_POOL/vm/cfg
     MY_VMCTL_DISK=/dev/zvol/$MY_VMCTL_POOL
     #MY_VMCTL_HOSTNAME=localhost
     mnvm_net=10.1.3
