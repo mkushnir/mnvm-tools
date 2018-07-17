@@ -21,7 +21,7 @@ var_required () {
     set -e
     for i in "$@"
     do
-        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+        eval "test -n \"\$$i\"" || ( echo missing variable \$$i && false )
     done
     eval $_old_e
 }
@@ -35,7 +35,7 @@ file_required () {
     set -p
     for i in "$@"
     do
-        eval "test -f \"$i\"" || ( echo missing $i && false )
+        eval "test -f \"$i\"" || ( echo missing file $i && false )
     done
     eval $_old_e
     eval $_old_p
@@ -50,7 +50,7 @@ cdev_required () {
     set -p
     for i in "$@"
     do
-        eval "test -c \"$i\"" || ( echo missing $i && false )
+        eval "test -c \"$i\"" || ( echo missing character device $i && false )
     done
     eval $_old_e
     eval $_old_p
@@ -65,7 +65,7 @@ dir_required () {
     set -p
     for i in "$@"
     do
-        eval "test -d \"$i\"" || ( echo missing $i && false )
+        eval "test -d \"$i\"" || ( echo missing directory $i && false )
     done
     eval $_old_e
     eval $_old_p
@@ -78,7 +78,7 @@ prog_required () {
     set -e
     for i in "$@"
     do
-        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
+        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing program $i && false )
     done
     eval $_old_e
 }
@@ -109,6 +109,7 @@ newvol () {
         _vol=`getdataset $_name`
         zfs destroy $_vol
         zfs create -V $_size $_vol
+        _vol=`getvol $_name`
     else
         _vol=`getvol $_name`
         rm -f $_vol
@@ -352,81 +353,6 @@ EOD
 }
 
 
-run_simple_linux_preset () {
-    local _cmd _d _g _ddev _devmapi _devmapr _cdisk
-
-    my-vmctl destroy $mnvm_name
-
-    _devmapi=device.map-${mnvm_id}.install
-    _devmapr=device.map-${mnvm_id}.run
-
-    if test "$1" = "install"
-    then
-        var_required mnvm_iso
-        _cmd=install-linux
-        _ddev=`newvol $mnvm_disk $mnvm_size`
-        if test -n "$grubi"
-        then
-            _g="-G $grubi"
-        else
-            _g=
-        fi
-        _d=$_devmapi
-        configure_linux
-
-    elif test "$1" = "run"
-    then
-        _cmd=run-linux
-        _ddev=`getvol $mnvm_disk`
-        if test -n "$grubr"
-        then
-            _g="-G $grubr"
-        else
-            _g=
-        fi
-        _d=$_devmapr
-        mnvm_iso=
-
-    elif test "$1" = "clone"
-    then
-        clone_dataset
-        configure_linux
-        return $?
-
-    elif test "$1" = "base"
-    then
-        base_dataset
-        return $?
-
-    elif test "$1" = "configure"
-    then
-        configure_linux
-        return $?
-
-    else
-        usage
-        return 1
-    fi
-
-    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
-
-    cat > device.map-${mnvm_id}.install <<EOD
-(cd0) $MY_VMCTL_ISO/${mnvm_iso}
-(hd0) $MY_VMCTL_DISK/${mnvm_disk}
-(hd1) ${_cdisk}
-EOD
-
-    cat > device.map-${mnvm_id}.run <<EOD
-(cd0) /fake
-(hd0) $MY_VMCTL_DISK/${mnvm_disk}
-(hd1) ${_cdisk}
-EOD
-
-    #export DEBUG=yes
-    my-vmctl -M1 $B_opt $_cmd $_g $_d $mnvm_iso "$_ddev|${_cdisk}" $mnvm_mac $mnvm_name $mnvm_cdev
-}
-
-
 run_simple_freebsd_preset () {
     local _cmd _ddev _hostaddr
 
@@ -436,6 +362,8 @@ run_simple_freebsd_preset () {
         var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $mnvm_disk $mnvm_size`
+        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        file_required $mnvm_iso
 
     elif test "$1" = "run"
     then
@@ -498,7 +426,7 @@ run_simple_windows_preset () {
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
-    my-vmctl -M1 $B_opt $_cmd $bootrom $mnvm_iso $mnvm_mac $_ddev $_hostaddr $mnvm_name 
+    my-vmctl -M1 $B_opt $_cmd $bootrom $MY_VMCTL_ISO/$mnvm_iso $mnvm_mac $_ddev $_hostaddr $mnvm_name
 }
 
 
@@ -511,6 +439,8 @@ run_simple_uefi_preset () {
         var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $mnvm_disk $mnvm_size`
+        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        file_required $mnvm_iso
         configure_linux
 
     elif test "$1" = "run"
@@ -571,6 +501,7 @@ then
     else
         var_required MY_VMCTL_ISO MY_VMCTL_CFG MY_VMCTL_DISK
     fi
+    dir_required $MY_VMCTL_ISO $MY_VMCTL_CFG $MY_VMCTL_DISK
 fi
 
 # Required variables:
