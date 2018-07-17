@@ -961,7 +961,19 @@ elif test "$1" = "list"
 then
     if test -d /dev/vmm
     then
-        ls /dev/vmm | sort
+        for i in `ls /dev/vmm | sort`
+        do
+            _er=`bhyvectl --vm=$i --get-exit-reason`
+            if echo ${_er} | grep -q ' 0x1e$'
+            then
+                echo "$i (exited)"
+            elif echo ${_er} | grep -q ' 0xc$'
+            then
+                echo "$i (running)"
+            else
+                echo "$i (unknown)"
+            fi
+        done
     else
         echo "No instances"
     fi
