@@ -246,7 +246,7 @@ configure_linux () {
     _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
     var_required _hostname
 
-    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
+    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
     rm -f ${_cdisk}
 
     if test -n "$MY_VMCTL_CFG_NTFS3G"
@@ -408,10 +408,10 @@ run_simple_linux_preset () {
         return 1
     fi
 
-    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
+    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
 
     cat > device.map-${mnvm_id}.install <<EOD
-(cd0) $MY_VMCTL_ROOT/${mnvm_iso}
+(cd0) $MY_VMCTL_ISO/${mnvm_iso}
 (hd0) $MY_VMCTL_DISK/${mnvm_disk}
 (hd1) ${_cdisk}
 EOD
@@ -540,7 +540,7 @@ run_simple_uefi_preset () {
         return 1
     fi
 
-    _cdisk="$MY_VMCTL_ROOT/${mnvm_disk}.cfg"
+    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
 
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
@@ -555,7 +555,9 @@ _zfs=
 # pool: for zfs hosting
 # MY_VMCTL_POOL=
 # root dir: for ISO images
-# MY_VMCTL_ROOT=
+# MY_VMCTL_ISO=
+# root dir: for cof images
+# MY_VMCTL_CFG=
 # dev dir: for disk devices
 # MY_VMCTL_DISK=
 B_opt=
@@ -565,9 +567,9 @@ then
     then
         _zfs=1
         B_opt=-b
-        var_required MY_VMCTL_POOL MY_VMCTL_ROOT MY_VMCTL_DISK
+        var_required MY_VMCTL_POOL MY_VMCTL_ISO MY_VMCTL_CFG MY_VMCTL_DISK
     else
-        var_required MY_VMCTL_ROOT MY_VMCTL_DISK
+        var_required MY_VMCTL_ISO MY_VMCTL_CFG MY_VMCTL_DISK
     fi
 fi
 
