@@ -1,7 +1,8 @@
 #!/bin/sh
 
 usage () {
-    echo "Usage: `basename $0` [ install | run | clone | base | configure ] IDX"
+    echo "Usage: `basename $0` [ install | run | base | configure ] IDX"
+    echo "Usage: `basename $0` clone IDX TEMPLATE"
 }
 
 
