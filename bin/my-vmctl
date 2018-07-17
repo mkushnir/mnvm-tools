@@ -959,7 +959,12 @@ then
 
 elif test "$1" = "list"
 then
-    ls /dev/vmm | sort
+    if test -d /dev/vmm
+    then
+        ls /dev/vmm | sort
+    else
+        echo "No instances"
+    fi
 
 elif test "$1" = "list-images"
 then
