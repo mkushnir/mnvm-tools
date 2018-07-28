@@ -1,0 +1,11 @@
+#!/bin/sh
+
+#MY_VMCTL_HOSTENV=skyrta
+MY_VMCTL_HOSTENV=big
+. ./my-vmctl-preset-hostenv
+
+MY_VMCTL_PLATENV=windows-10
+. ./my-vmctl-preset-platenv
+
+. ./my-vmctl-preset-subr
+eval $mnvm_simple_preset $*

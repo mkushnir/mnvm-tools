@@ -1,6 +1,13 @@
 #!/bin/sh
 
-if test "$MY_VMCTL_PLATENV" = "ubuntu-18"
+if test "$MY_VMCTL_PLATENV" = "freebsd-11"
+then
+    mnvm_idx_offset=0
+    mnvm_tag=freebsd-11
+    mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
+    mnvm_simple_preset=run_simple_freebsd_preset
+
+elif test "$MY_VMCTL_PLATENV" = "ubuntu-18"
 then
     mnvm_idx_offset=16
     mnvm_tag=ubuntu-18
@@ -18,12 +25,21 @@ then
     mnvm_iso=CentOS-7-x86_64-Everything-1804.iso
     mnvm_simple_preset=run_simple_uefi_preset
 
-elif test "$MY_VMCTL_PLATENV" = "freebsd-11"
+elif test "$MY_VMCTL_PLATENV" = "windows-7"
 then
-    mnvm_idx_offset=0
-    mnvm_tag=freebsd-11
-    mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
-    mnvm_simple_preset=run_simple_freebsd_preset
+    mnvm_idx_offset=48
+    mnvm_tag=windows-7
+    #mnvm_iso=en_windows_7_professional_x64_dvd.iso
+    #mnvm_iso=pcriver.com_win_7_64bit_ult.iso
+    mnvm_iso=pcriver.com_win_7_64bit_ult-remastered.iso
+    mnvm_simple_preset=run_simple_windows_preset
+
+elif test "$MY_VMCTL_PLATENV" = "windows-10"
+then
+    mnvm_idx_offset=48
+    mnvm_tag=windows-10
+    mnvm_iso=Win10_1803_Ukrainian_x64-remastered.iso
+    mnvm_simple_preset=run_simple_windows_preset
 else
     echo MY_VMCTL_PLATENV is not set
     exit 1;

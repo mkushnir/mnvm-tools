@@ -86,7 +86,10 @@ fi
 
 batch=1
 dryrun=
-consdev=stdio
+
+considx=1
+cons_opt=
+
 memsz=4G
 
 mcpu=0
@@ -96,6 +99,11 @@ basic_pci_opt=
 net_opt=
 disk_opt=
 cdrom_opt=
+install_opt_0=
+install_opt_1=
+install_opt_2=
+install_opt_3=
+installidx=0
 
 load_disk=
 passthrough_opt=
@@ -110,7 +118,7 @@ busid=0
 basic_pci_opt="-s ${busid}:0,hostbridge"
 busid=$(( busid + 1 ))
 
-args=`getopt Ab:Bc:C:d:D:E:g:G:hiI:l:L:m:M:nN:p:P:u: $*`
+args=`getopt Ab:Bc:C:d:D:E:g:G:hiI:K:l:L:m:M:nN:p:P:u: $*`
 if test $? -ne 0
 then
     exit 1
@@ -143,7 +151,8 @@ do
 
         -c)
             shift
-            consdev=$1
+            cons_opt="${cons_opt} -l com${considx},/dev/nmdm${1}A"
+            considx=$(( $considx + 1 ))
             shift
         ;;
 
@@ -218,13 +227,23 @@ do
             d="`_abspath $1`"
             if echo $grubdev | grep -q hd
             then
+                eval "install_opt_${installidx}=\"-s ${busid}:0,ahci-hd,$d\""
                 #install_opt="-s ${busid}:0,virtio-blk,$d"
-                install_opt="-s ${busid}:0,ahci-hd,$d"
+                #install_opt="-s ${busid}:0,ahci-hd,$d"
             else
-                install_opt="-s ${busid}:0,ahci-cd,$d"
+                eval "install_opt_${installidx}=\"-s ${busid}:0,ahci-cd,$d\""
+                #install_opt="-s ${busid}:0,ahci-cd,$d"
             fi
+            installidx=$(( $installidx + 1 ))
             busid=$(( busid + 1 ))
             load_disk="$d"
+            shift
+        ;;
+
+        -K)
+            shift
+            net_opt="-s ${busid}:0,e1000,$1"
+            busid=$(( busid + 1 ))
             shift
         ;;
 
@@ -303,7 +322,6 @@ mcpu=$mcpu_opt
 name=$1
 
 basic_pci_opt="$basic_pci_opt -s 31:0,lpc"
-cons_opt="-l com1,$consdev"
 
 if test -z "$pinnedcpu_opt"
 then
@@ -323,13 +341,13 @@ then
 fi
 
 prog_required bhyvectl bhyve
-var_required load_disk name
 
 if test -n "$DEBUG"
 then
     set -x
 fi
 
+installidx=0
 while true
 do
     _do_it "bhyvectl --vm=$name --destroy"
@@ -338,7 +356,8 @@ do
     then
         if test -z "$nobhyveload"
         then
-            _do_it "bhyveload -c $consdev -m $memsz -d $load_disk $name"
+            var_required load_disk name
+            _do_it "bhyveload -m $memsz -d $load_disk $name"
         fi
     else
         memsz=4096
@@ -355,6 +374,8 @@ do
         echo "Failed to load $name"
         exit 1
     fi
+
+    eval "install_opt=\$install_opt_${installidx}"
 
     _do_it "bhyve -H -P $pinnedcpu_opt \
         -c $mcpu \
@@ -379,4 +400,5 @@ do
         echo "re-starting ..."
         sleep 1
     fi
+    installidx=$(( $installidx + 1 ))
 done

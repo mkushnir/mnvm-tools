@@ -403,20 +403,22 @@ run_simple_windows_preset () {
     local _cmd _ddev _hostaddr
 
     my-vmctl destroy $mnvm_name
+    if test -z "$fakeiso"
+    then
+        fakeiso="$MY_VMCTL_ISO/.fakeiso-$mnvm_name"
+    fi
+    :> $fakeiso
     if test "$1" = "install"
     then
         var_required mnvm_iso
         _cmd=install-windows
         _ddev=`newvol $mnvm_disk $mnvm_size`
+        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso|$fakeiso"
+
     elif test "$1" = "run"
     then
         _cmd=run-windows
         _ddev=`getvol $mnvm_disk $mnvm_size`
-        if test -z "$fakeiso"
-        then
-            fakeiso=.fakeiso-$mnvm_name
-        fi
-        :> $fakeiso
         mnvm_iso=$fakeiso
 
     else
@@ -427,7 +429,7 @@ run_simple_windows_preset () {
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
-    my-vmctl -M1 $B_opt $_cmd $bootrom $MY_VMCTL_ISO/$mnvm_iso $mnvm_mac $_ddev $_hostaddr $mnvm_name
+    my-vmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
 
