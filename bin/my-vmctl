@@ -2,31 +2,41 @@
 
 usage() {
     echo "Usage:"
-    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ]"
+    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ] COMMAND [ args ]"
+    echo
+    echo "Commands:"
     echo "    setup [altroot]"
     echo "    teardown [altroot]"
-    echo "    start-iface"
-    echo "    stop-iface"
+    echo
     echo "    install distro disk[:disk] mac vmname"
     echo "    install-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap distro disk[:disk] mac vmname"
     echo "    install-windows distro disk[:disk] mac cdev hostname vmname"
     echo "    install-uefi distro disk[:disk] mac cdev hostname vmname"
+    echo
     echo "    run disk[:disk] mac vmname"
-    echo "    list"
-    echo "    list-images"
-    echo "    poweroff vmname"
-    echo "    reset vmname"
-    echo "    destroy vmanme"
-    echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
     echo "    run-windows fakecd disk[:disk] mac cdev hostname vmname"
     echo "    run-uefi disk[:disk] mac cdev hostname vmname"
-    echo "    check"
+    echo
+    echo "    list"
+    echo "    list-images"
+    echo
+    echo "    poweroff vmname"
+    echo "    reset vmname"
+    echo
+    echo "    destroy vmanme"
+    echo "    destroy-image image"
+    echo
     echo "    connect cdev [ hostname ]"
     echo "    connect-cu cdev"
-    echo "    send-script script"
     echo
-    echo " special commands (require altroot setup/teardown):"
+    echo " Misc commands:"
+    echo "    check"
+    echo "    send-script script"
+    echo "    start-iface"
+    echo "    stop-iface"
+    echo
+    echo " Special commands (require altroot setup/teardown):"
     echo "    mountalt"
     echo "    linkalt"
     echo "    runalt"
