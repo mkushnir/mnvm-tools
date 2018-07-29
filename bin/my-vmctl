@@ -1175,24 +1175,29 @@ then
 
     if test -z "$3"
     then
-        _hostname=127.0.0.1
+        _hostname='127.0.0.1'
     else
         _hostname=$3
     fi
 
     addr="${_hostname}:$(( 5900 + $_cdev ))"
-    if sockstat -l | grep -q $addr
+    if echo ${_hostname} | grep -qF '127.0.0.1'
     then
-        vncviewer $addr
-    else
-        cdev="/dev/nmdm${_cdev}B"
-        if test -e $cdev
+        if sockstat -l | grep -q $addr
         then
-            echo "Connecting to $cdev ..."
-            cu -l $cdev -t
+            vncviewer $addr
         else
-            echo "Cannot connect to $cdev"
+            cdev="/dev/nmdm${_cdev}B"
+            if test -e $cdev
+            then
+                echo "Connecting to $cdev ..."
+                cu -l $cdev -t
+            else
+                echo "Cannot connect to $cdev"
+            fi
         fi
+    else
+        vncviewer $addr
     fi
 
 elif test "$1" = "connect-cu"
