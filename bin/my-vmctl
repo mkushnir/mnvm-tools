@@ -15,6 +15,7 @@ usage() {
     echo "    list"
     echo "    list-images"
     echo "    poweroff vmname"
+    echo "    reset vmname"
     echo "    destroy vmanme"
     echo "    destroy-image image"
     echo "    run-linux [ -D grubdev ] [ -g grubdir] [ -G grubconf ] devmap disk[:disk] mac vmname"
@@ -32,6 +33,7 @@ usage() {
     echo "    destroyalt"
     echo "    umountalt"
     echo "    poweroffalt"
+    echo "    resetalt"
     echo
 }
 
@@ -382,13 +384,16 @@ _install_windows() {
     then
         local _diskopt="`_split $disk_switch ${_disk}`"
         local _distropt="`_split $distro_switch ${_distro}`"
+        local _com1 _com2
         mybhyve_opts="${mybhyve_opts} -B"
-        #mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
-        #mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
+        mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
+        mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
         mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
-        mybhyve_opts="${mybhyve_opts} -c 1 -c 2"
+        _com1=$(( $_cdev * 2 + 0 ))
+        _com2=$(( $_cdev * 2 + 1 ))
+        mybhyve_opts="${mybhyve_opts} -c ${_com1} -c ${_com2}"
 
-        _do_it "my-bhyve $mybhyve_opts ${_distropt} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' ${_distropt} ${_diskopt} ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -550,13 +555,17 @@ _run_windows() {
     if test "${_answer}" = "y"
     then
         local _diskopt="`_split $disk_switch ${_disk}`"
+        local _distropt="`_split $distro_switch ${_distro}`"
+        local _com1 _com2
         mybhyve_opts="${mybhyve_opts} -B"
         mybhyve_opts="${mybhyve_opts} -E 29:0,fbuf,${_fbuf}"
         mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
         mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
-        mybhyve_opts="${mybhyve_opts} -c 1 -c 2"
+        _com1=$(( $_cdev * 2 + 0 ))
+        _com2=$(( $_cdev * 2 + 1 ))
+        mybhyve_opts="${mybhyve_opts} -c ${_com1} -c ${_com2}"
 
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -I ${_distro} ${_diskopt} ${_vmname}"
+        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' ${_distropt} ${_diskopt} ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -683,6 +692,30 @@ _runalt() {
     fi
 }
 
+
+_poweroff() {
+    if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
+    then
+        echo "Powering off $1 ..."
+        _do_it "bhyvectl --vm=$1 --force-poweroff"
+    else
+        echo "No such vm: $1"
+        return 1
+    fi
+    return 0
+}
+
+_reset() {
+    if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
+    then
+        echo "Re-setting $1 ..."
+        _do_it "bhyvectl --vm=$1 --force-reset"
+    else
+        echo "No such vm: $1"
+        return 1
+    fi
+    return 0
+}
 
 _destroy() {
     _do_it "bhyvectl --vm=$1 --destroy"
@@ -988,14 +1021,12 @@ then
 
 elif test "$1" = "poweroff"
 then
-    if test -n "$2" && ls /dev/vmm | grep -q "$2"
-    then
-        echo "Powering off $2 ..."
-        bhyvectl --vm=$2 --force-poweroff
-    else
-        echo "No such vm: $2"
-        exit 1
-    fi
+    _poweroff $2
+    _destroy $2
+
+elif test "$1" = "reset"
+then
+    _reset $2
 
 elif test "$1" = "destroy"
 then
@@ -1059,11 +1090,12 @@ then
 
 elif test "$1" = "poweroffalt"
 then
-    bhyvectl --vm=altroot --force-poweroff
+    _poweroff altroot
+    _destroy altroot
 
 elif test "$1" = "resetalt"
 then
-    bhyvectl --vm=altroot --force-reset
+    _reset altroot
 
 elif test "$1" = "destroyalt"
 then

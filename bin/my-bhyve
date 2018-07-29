@@ -375,7 +375,7 @@ do
         exit 1
     fi
 
-    eval "install_opt=\$install_opt_${installidx}"
+    eval "if test -n \"\$install_opt_${installidx}\"; then install_opt=\$install_opt_${installidx}; fi"
 
     _do_it "bhyve -H -P $pinnedcpu_opt \
         -c $mcpu \
