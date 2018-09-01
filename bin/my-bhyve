@@ -151,7 +151,7 @@ do
 
         -c)
             shift
-            cons_opt="${cons_opt} -l com${considx},/dev/nmdm${1}A"
+            cons_opt="${cons_opt} -l com${considx},${1}"
             considx=$(( $considx + 1 ))
             shift
         ;;
