@@ -626,7 +626,11 @@ _run_uefi() {
 _runalt() {
     local _rootmount _disk _tap _bootrom _mac _boottype _ctype _cdev _fbuf _vmname _answer
 
-    _boottype=uefi
+    _boottype=console
+    if test -n "$MY_VMCTL_BOOTTYPE"
+    then
+        _boottype=$MY_VMCTL_BOOTTYPE
+    fi
     _mac=$1
 
     var_required _mac
