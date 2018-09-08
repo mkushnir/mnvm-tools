@@ -39,7 +39,7 @@ usage() {
     echo " Special commands (require altroot setup/teardown):"
     echo "    mountalt"
     echo "    linkalt"
-    echo "    runalt"
+    echo "    runalt (env MY_VMCTL_BOOTTYPE=console|uefi)"
     echo "    destroyalt"
     echo "    umountalt"
     echo "    poweroffalt"
