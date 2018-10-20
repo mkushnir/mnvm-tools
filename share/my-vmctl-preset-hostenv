@@ -1,8 +1,9 @@
-#!/bin/sh
+MIN#!/bin/sh
 
 if test "$MY_VMCTL_HOSTENV" = "big"
 then
     #MY_VMCTL_DDEV_ZFS=
+    #MINVMCTL_DDEV_ZFS=
     MY_VMCTL_ISO=/data0/mkushnir/vm/iso
     MY_VMCTL_CFG=/data0/mkushnir/vm/diskdev
     MY_VMCTL_DISK=/data0/mkushnir/vm/diskdev
@@ -11,6 +12,7 @@ then
 elif test "$MY_VMCTL_HOSTENV" = "skyrta"
 then
     MY_VMCTL_DDEV_ZFS=1
+    MINVMCTL_DDEV_ZFS=1
     MY_VMCTL_POOL=skyrta
     MY_VMCTL_ISO=/$MY_VMCTL_POOL/vm/iso
     MY_VMCTL_CFG=/$MY_VMCTL_POOL/vm/cfg

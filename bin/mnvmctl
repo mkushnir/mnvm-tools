@@ -1,0 +1,810 @@
+#!/bin/sh
+
+usage() {
+    echo "Usage:"
+    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ] COMMAND [ args ]"
+    echo
+    echo "Commands:"
+    echo "    setup [altroot]"
+    echo "    teardown [altroot]"
+    echo
+    echo "    install-uefi distro disk[:disk] mac cdev hostname vmname"
+    echo
+    echo "    run-uefi disk[:disk] mac cdev hostname vmname"
+    echo
+    echo "    list"
+    echo "    list-images"
+    echo
+    echo "    poweroff vmname"
+    echo "    reset vmname"
+    echo
+    echo "    destroy vmname"
+    echo "    destroy-image image"
+    echo
+    echo "    connect cdev [ hostname ]"
+    echo "    connect-cu cdev"
+    echo
+    echo " Misc commands:"
+    echo "    check"
+    echo "    send-script script"
+    echo "    start-iface"
+    echo "    stop-iface"
+    echo
+    echo " Special commands (require altroot setup/teardown):"
+    echo "    mountalt"
+    echo "    linkalt"
+    echo "    runalt (env MINVMCTL_BOOTTYPE=console|uefi)"
+    echo "    destroyalt"
+    echo "    umountalt"
+    echo "    poweroffalt"
+    echo "    resetalt"
+    echo
+}
+
+
+var_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "test -n \"\$$i\"" || ( echo missing \$$i && false )
+    done
+    eval $_old_e
+}
+
+
+file_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -f \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+dir_required () {
+    local _old_e _old_p
+    _old_e=`set +o | grep errexit`
+    _old_p=`set +o | grep physical`
+    set -e
+    set -p
+    for i in "$@"
+    do
+        eval "test -d \"$i\"" || ( echo missing $i && false )
+    done
+    eval $_old_e
+    eval $_old_p
+}
+
+
+prog_required () {
+    local _old_e
+    _old_e=`set +o | grep errexit`
+    set -e
+    for i in "$@"
+    do
+        eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
+    done
+    eval $_old_e
+}
+
+
+_split() {
+    echo $2 | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
+}
+
+
+_splitex() {
+    local _opt _list _prefix
+    _opt=$1
+    _list=$2
+    _prefix=$3
+    if test -n "${_prefix}"
+    then
+        echo ${_list} | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"${_opt} '${_prefix},%s' \", a[i]; }"
+    else
+        echo ${_list} | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"${_opt} '%s' \", a[i]; }"
+    fi
+}
+
+
+_abspath() {
+    if echo $1 | grep -q '^/'
+    then
+        echo $1
+    else
+        echo "`pwd`/$1"
+    fi
+}
+
+
+_do_it() {
+    local _answer
+    if /bin/test -z "$batch"
+    then
+        read -p "Running $* ... [yes/no/batch] " _answer
+    else
+        _answer=yes
+    fi
+    if test -n "$DEBUG"
+    then
+        logger "Running $*"
+    fi
+    case "${_answer}" in
+        yes)
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        batch)
+            batch=1
+            if test -n "$dryrun"
+            then
+                echo "$*";
+            else
+                eval "$*";
+            fi
+        ;;
+        *)
+            /bin/echo "skipped ..."
+        ;;
+    esac
+}
+
+
+_is_mounted() {
+    if mount -p | awk '{print $2;}' | grep -q "^${1}$"
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+_rootdev() {
+    n=$1
+    if test -z "$n"
+    then
+        n=altroot
+    fi
+    mount -p | awk '{print $1, $2;}' | grep "/$n\$" | awk '{print $1;}'
+}
+
+
+_checkfstat() {
+    local n
+    n=$1
+    if test -z "$n"
+    then
+        n=altroot
+    fi
+    mount -p | awk '{print $2;}' | grep -E "/$n(/|\$)" >/tmp/altroots
+    if fstat | grep -f /tmp/altroots
+    then
+        rm /tmp/altroots
+        return 1
+    else
+        rm /tmp/altroots
+        return 0
+    fi
+}
+
+
+_start_ifaces() {
+    local i _tap
+    for i in if_tap vmm nmdm fuse ext2fs
+    do
+        if ! kldstat -q -m $i
+        then
+            kldload $i
+        fi
+    done
+    sysctl net.link.tap.user_open=1
+    sysctl net.link.tap.up_on_open=1
+    #if ! ifconfig -l | grep -E -q 'bridge0'
+    #then
+    #    ifconfig bridge0 create
+    #    ifconfig bridge0 inet 10.1.2.10 netmask 255.255.255.0
+    #    ifconfig bridge0 up
+    #fi
+    #for i in 0 1 2 3 4 5 6 7 8 9
+    #do
+    #    _tap=`ifconfig tap create`
+    #    ifconfig bridge0 addm ${_tap}
+    #done
+}
+
+
+_stop_ifaces() {
+    local i _all_ifaces
+    _all_ifaces="`ifconfig -l`"
+
+    for i in ${_all_ifaces}
+    do
+        if echo $i | egrep -q 'tap[0-9]+'
+        then
+            ifconfig $i down
+            ifconfig $i destroy
+        fi
+    done
+
+    #if echo ${_all_ifaces} | egrep -q 'bridge0'
+    #then
+    #    ifconfig bridge0 down
+    #    ifconfig bridge0 destroy
+    #fi
+    sysctl net.link.tap.user_open=0
+    sysctl net.link.tap.up_on_open=0
+
+    #vmm fuse ext2fs
+    for i in if_tap nmdm
+    do
+        if kldstat -q -m $i
+        then
+            kldunload $i || true
+        fi
+    done
+}
+
+
+_new_tap() {
+    local _tap
+    _tap=`ifconfig tap create`
+    ifconfig bridge0 addm ${_tap}
+    #ifconfig ${_tap} up
+    chmod 0660 /dev/${_tap}
+    echo ${_tap}
+}
+
+
+_pick_tap() {
+    local _taps
+    _taps="`ifconfig -l -d`"
+    for i in ${_taps}
+    do
+        if echo $i | egrep -q 'tap[0-9]+'
+        then
+            echo $i
+            return
+        fi
+    done
+    _new_tap
+}
+
+
+_destroy_tap() {
+    local _tap
+    _tap=$1
+    ifconfig ${_tap} down
+    ifconfig bridge0 deletem ${_tap}
+    ifconfig ${_tap} destroy
+}
+
+
+_install_uefi() {
+    local _distro _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
+
+    _distro=$1
+    _disk=$2
+    _mac=$3
+    _cdev=$4
+    _hostname=$5
+    _vmname=$6
+
+    var_required _distro _disk _mac _cdev _hostname _vmname
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    file_required $_bootrom
+
+    _tap=`_pick_tap`
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        local _distropt="`_splitex --cdrom $distro_switch`"
+        mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
+        mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
+        mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
+        _do_it "mnbhyve $mnbhyve_opts  ${_distropt} ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_uefi() {
+    local _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
+
+    _disk=$1
+    _mac=$2
+    _cdev=$3
+    _hostname=$4
+    _vmname=$5
+
+    var_required _disk _mac _cdev _hostname _vmname
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768"
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    file_required $_bootrom
+
+    _tap=`_pick_tap`
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
+        mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
+        mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
+        _do_it "mnbhyve $mnbhyve_opts ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_poweroff() {
+    if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
+    then
+        echo "Powering off $1 ..."
+        _do_it "bhyvectl --vm=$1 --force-poweroff"
+    else
+        echo "No such vm: $1"
+        return 1
+    fi
+    return 0
+}
+
+_reset() {
+    if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
+    then
+        echo "Re-setting $1 ..."
+        _do_it "bhyvectl --vm=$1 --force-reset"
+    else
+        echo "No such vm: $1"
+        return 1
+    fi
+    return 0
+}
+
+_destroy() {
+    _do_it "bhyvectl --vm=$1 --destroy"
+    return 0
+}
+
+
+_destroy_image() {
+    batch=
+    if test -n "$_zfs"
+    then
+        _do_it "zfs destroy $1"
+    fi
+    return 0
+}
+
+_list_images() {
+    if test -n "$_zfs"
+    then
+        _do_it "zfs list -t volume"
+    fi
+    return 0
+}
+
+_umountalt() {
+    if ! _checkfstat
+    then
+        echo
+        echo "Some mounts on altdev are still open. Please first kill processes listed above."
+        exit 1
+    fi
+
+    altrootnum=`_rootdev | sed 's|.*/root||'`
+
+    for i in `mount -p | awk '{print $2;}' | grep -E '/altroot(/|$)'`;
+    do
+        umount -f $i
+    done;
+
+    # Special treatment
+    umount -f /dev/gpt/data${altrootnum}
+    swapoff /dev/gpt/swap${altrootnum}
+}
+
+
+_mountalt() {
+    for i in $nonshared_mounts
+    do
+        if ! _is_mounted /altroot$i
+        then
+            mount /altroot$i
+        fi
+    done
+    for i in $shared_mounts
+    do
+        if ! _is_mounted $i
+        then
+            mount $i
+        fi
+    done
+    altrootnum=`_rootdev | sed 's|.*/root||'`
+    swapon /dev/gpt/swap${altrootnum}
+}
+
+
+_linkalt() {
+    local _arg altrootdev
+
+    _arg=$1
+    var_required _arg
+
+    altrootdev="`_rootdev`"
+    if test -z "$altrootdev"
+    then
+        _mountalt
+    fi
+    altrootdev="`_rootdev`"
+    if test -z "$altrootdev"
+    then
+        echo "Something wrong with the /altroot mount. You might want to run $0 mountalt"
+        exit 1
+    fi
+
+    if test "${_arg}" = "vm"
+    then
+        rm -f /altroot/etc/rc.conf
+        ln -s rc.conf.vtnet0 /altroot/etc/rc.conf
+        #sed -e 's/^\(ttyu0.*\)\(off\)\(.*\)$/\1on\3/' -i '.bak' /altroot/etc/ttys
+
+    elif test "${_arg}" = "host"
+    then
+        rm -f /altroot/etc/rc.conf
+        ln -s rc.conf.host /altroot/etc/rc.conf
+        #sed -e 's/^\(ttyu0.*\)\(on\)\(.*\)$/\1off\3/' -i '.bak' /altroot/etc/ttys
+    fi
+}
+
+_send_script() {
+    local _cdev _prompt _line
+
+    _cdev=$1
+    var_required _cdev
+
+    _prompt="`basename $_cdev`:>"
+    while true
+    do
+        read _line
+        if echo "$_line" | grep ^__secure__: >/dev/null 2>&1
+        then
+            _line=`echo "$_line" | sed -e 's/^__secure__://'`
+            echo "$_prompt ***"
+        else
+            echo "$_prompt $_line"
+        fi
+        if echo "$_line" | grep '^#' >/dev/null 2>&1
+        then
+            continue
+        fi
+        printf "$_line\n" >$_cdev
+        if test -z "$_line"
+        then
+            break
+        fi
+        sleep 0.2
+    done
+}
+
+
+# main
+#
+standard_labels="root swap var tmp work usr data"
+nonshared_mounts="/ /dev /var /tmp /work /usr"
+shared_mounts="/data0 /data1"
+
+set -e
+if test -n "$DEBUG"
+then
+    set -x
+fi
+
+_zfs=
+if zpool list >/dev/null 2>&1
+then
+    if test -z "$MINVMCTL_DDEV_UFS"
+    then
+        _zfs=1
+    fi
+fi
+
+batch=1
+dryrun=
+mnbhyve_opts='--busid-start 3'
+disk_switch=-d
+disk_emul=ahci-hd
+distro_switch=-I
+
+args=`getopt bE:m:M:n $*`
+if test $? -ne 0
+then
+    exit 1
+fi
+set -- $args
+while true
+do
+    case "$1" in
+        -b)
+            shift
+            disk_switch=-b
+            disk_emul=virtio-blk
+        ;;
+
+        -E)
+            shift
+            mnbhyve_opts="$mnbhyve_opts --extra '$1'"
+            shift
+        ;;
+
+        -m)
+            shift
+            mnbhyve_opts="$mnbhyve_opts --memory $1"
+            shift
+        ;;
+
+        -M)
+            shift
+            mnbhyve_opts="$mnbhyve_opts --ncpu $1"
+            shift
+        ;;
+
+        -n)
+            shift
+            dryrun=1
+            mnbhyve_opts="$mnbhyve_opts --dryrun"
+        ;;
+
+        --)
+            shift
+            break
+        ;;
+
+    esac
+done
+
+
+if test "$1" = "start-iface"
+then
+    _start_ifaces
+
+elif test "$1" = "stop-iface"
+then
+    _stop_ifaces
+
+elif test "$1" = "install-uefi"
+then
+    shift
+    _install_uefi $1 $2 $3 $4 $5 $6
+
+elif test "$1" = "list"
+then
+    if test -d /dev/vmm
+    then
+        for i in `ls /dev/vmm | sort`
+        do
+            _er=`bhyvectl --vm=$i --get-exit-reason`
+            if echo ${_er} | grep -q ' 0x1e$'
+            then
+                echo "$i (exited)"
+            elif echo ${_er} | grep -q ' 0xc$'
+            then
+                echo "$i (running)"
+            else
+                echo "$i (unknown)"
+            fi
+        done
+    else
+        echo "No instances"
+    fi
+
+elif test "$1" = "list-images"
+then
+    _list_images
+
+elif test "$1" = "poweroff"
+then
+    _poweroff $2
+    _destroy $2
+
+elif test "$1" = "reset"
+then
+    _reset $2
+
+elif test "$1" = "destroy"
+then
+    _destroy $2
+
+elif test "$1" = "destroy-image"
+then
+    _destroy_image $2
+
+elif test "$1" = "run-uefi"
+then
+    shift
+    _run_uefi $1 $2 $3 $4 $5
+
+elif test "$1" = "poweroffalt"
+then
+    _poweroff altroot
+    _destroy altroot
+
+elif test "$1" = "resetalt"
+then
+    _reset altroot
+
+elif test "$1" = "destroyalt"
+then
+    _destroy altroot
+
+elif test "$1" = "umountalt"
+then
+    _umountalt
+
+elif test "$1" = "mountalt"
+then
+    _mountalt
+
+elif test "$1" = "linkalt"
+then
+    _linkalt $2
+
+elif test "$1" = "setup"
+then
+    # linkalt vm
+    # umountalt
+    # start
+    if test "$2" = "altroot"
+    then
+        _linkalt vm && _umountalt && _start_ifaces
+    else
+        _start_ifaces
+    fi
+
+elif test "$1" = "teardown"
+then
+    # destroyalt
+    # stop
+    # mountalt
+    # linkalt host
+    if test -d /dev/vmm
+    then
+        for i in `ls /dev/vmm`
+        do
+            _destroy $i
+        done
+    fi
+    _stop_ifaces
+    if test "$2" == "altroot"
+    then
+        _mountalt && _linkalt host
+    fi
+
+elif test "$1" = "check"
+then
+    if _checkfstat $2
+    then
+        echo "No open mounts on altdev"
+    else
+        echo
+        echo "Some open mounts on altdev"
+    fi
+
+elif test "$1" = "connect"
+then
+    if test -z "$2"
+    then
+        _cdev=0
+    else
+        _cdev=$2
+    fi
+
+    if test -z "$3"
+    then
+        _hostname='127.0.0.1'
+    else
+        _hostname=$3
+    fi
+
+    addr="${_hostname}:$(( 5900 + $_cdev ))"
+    if echo ${_hostname} | grep -qF '127.0.0.1'
+    then
+        if sockstat -l | grep -q $addr
+        then
+            vncviewer $addr
+        else
+            cdev="/dev/nmdm${_cdev}B"
+            if test -e $cdev
+            then
+                echo "Connecting to $cdev ..."
+                cu -l $cdev -t
+            else
+                echo "Cannot connect to $cdev"
+            fi
+        fi
+    else
+        vncviewer $addr
+    fi
+
+elif test "$1" = "connect-cu"
+then
+    if test -z "$2"
+    then
+        _cdev=0
+    else
+        _cdev=$2
+    fi
+
+    cdev="/dev/nmdm${_cdev}B"
+    if test -e $cdev
+    then
+        echo "Connecting to $cdev ..."
+        cu -l $cdev -t
+    else
+        echo "Cannot connect to $cdev"
+    fi
+
+elif test "$1" = "send-script"
+then
+    if test -z "$2"
+    then
+        cdev="/dev/nmdm0B"
+    else
+        cdev="/dev/nmdm${2}B"
+    fi
+    if test -e $cdev
+    then
+        echo "Sending $3 to $cdev ..."
+        if test -e "$3"
+        then
+            cat $3 | _send_script $cdev
+        fi
+
+    else
+        echo "Could not find console $cdev"
+        exit 1
+    fi
+
+else
+    usage
+fi
+

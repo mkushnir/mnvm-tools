@@ -5,7 +5,7 @@ then
     mnvm_idx_offset=0
     mnvm_tag=freebsd-11
     mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
-    mnvm_simple_preset=run_simple_freebsd_preset
+    mnvm_simple_preset=run_simple_uefi_preset
 
 elif test "$MY_VMCTL_PLATENV" = "ubuntu-18"
 then

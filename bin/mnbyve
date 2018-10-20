@@ -1,0 +1,158 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+import re
+import sys
+import subprocess
+import time
+
+bhyvectl = '/usr/sbin/bhyvectl'
+bhyve = '/usr/sbin/bhyve'
+dryrun = False
+
+
+def _dryrun_command(*args):
+    print "Running:", ' '.join(args)
+
+
+def _run_command(*args):
+    #print "Running:", ' '.join(args)
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _stdout, _stderr = p.communicate()
+    if _stderr:
+        print >>sys.stderr, _stderr.strip()
+    return p, _stdout.strip()
+
+
+def safestr(s):
+    if s:
+        return str(s)
+    return ''
+
+
+def vm_run(*args):
+    name = args[-1]
+    if dryrun:
+        _dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
+        _dryrun_command(bhyve, *(safestr(i) for i in args))
+        return -1
+    else:
+        _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
+        p, out = _run_command(bhyve, *(safestr(i) for i in args))
+        print out
+        return p.returncode
+
+def vm_destroy(name):
+    if dryrun:
+        _dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
+    else:
+        _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
+
+def vm_status(name):
+    p, out = _run_command(bhyvectl, '--vm=%s' % name, '--get-exit-reason')
+    if re.match(r'^.*\s0x1e$', out):
+        return 'exited'
+    elif re.match(r'^.*\s0xc$', out):
+        return 'running'
+    else:
+        return 'unknown'
+
+
+def build_bhyve_args(args, idx):
+    busid = args.busid_start
+    consid = 0
+    pci_devices = ['0:0,hostbridge']
+
+    res = ['-H', '-P', '-c', args.ncpu, '-m', args.memory]
+
+    if args.lpc:
+        for i in args.lpc:
+            res.extend(['-l', i])
+
+    if args.cdrom:
+        if idx >= len(args.cdrom):
+            opt = args.cdrom[-1]
+        else:
+            opt = args.cdrom[idx]
+        if opt:
+            pci_devices.append('%d:0,ahci-cd,%s' % (busid, opt))
+            busid += 1
+
+    if args.disk:
+        for i in args.disk:
+            pci_devices.append('%d:0,%s' % (busid, i))
+            busid += 1
+
+    if args.net:
+        for i in args.net:
+            pci_devices.append('%d:0,%s' % (busid, i))
+            busid += 1
+
+    if args.pci:
+        for i in args.pci:
+            pci_devices.append('%d:0,%s' % (busid, i))
+            busid += 1
+
+    assert (busid <= 31)
+    pci_devices.append('31:0,lpc')
+
+    for i in pci_devices:
+        res.extend(['-s', i])
+
+    if args.extra:
+        for i in args.extra:
+            pair = i.split(',', 1)
+            if len(pair) == 2:
+                res.extend(['-%s' % pair[0], pair[1]])
+            else:
+                res.append('-%s' % pair[0])
+
+    res.append(args.name)
+    return res
+
+def main():
+    global dryrun
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dryrun', action='store_true', help='Do not actually run commands')
+    parser.add_argument('--cdrom', action='append', help='CD ROM device specification', metavar='PATH')
+    parser.add_argument('--disk', action='append', help='Hard disk device specification', metavar='EMUL,PATH')
+    parser.add_argument('--net', action='append', help='Network device specification', metavar='EMUL,TAP,mac=MAC')
+    parser.add_argument('--lpc', action='append', help='LPC device specification', metavar='EMUL,CONF')
+    parser.add_argument('--memory', action='store', help='Physical memory size', metavar='SIZE', default='512M')
+    parser.add_argument('--ncpu', action='store', type=int, help='Number of CPUs', metavar='NUM', default=1)
+    parser.add_argument('--pincpu', action='append', help='Virtual-to-host cpu pin', metavar='V:H', default=['0:0'])
+    parser.add_argument('--pci', action='append', help='PCI device specification', metavar='EMUL,CONF')
+    parser.add_argument('--busid-start', type=int, help='PCI bus ID start for devices', metavar='NUM', default=1)
+    parser.add_argument('--extra', action='append', help='bhyve extra option', metavar='ARG[,VAL...]')
+    parser.add_argument('name', help='bhyve guest name', metavar='NAME')
+    args = parser.parse_args()
+    assert (args.busid_start > 0)
+
+    dryrun = args.dryrun
+
+    vm_destroy(args.name)
+    i = 0
+    while True:
+        bhyve_args = build_bhyve_args(args, i)
+        try:
+            rc = vm_run(*bhyve_args)
+        except (KeyboardInterrupt, Exception):
+            vm_destroy(args.name)
+            raise
+
+        if rc == 0:
+            print 're-starting %s ...' % args.name
+            time.sleep(2)
+        else:
+            print 'bhyve returned with %d, exiting ...' % rc
+            break
+        i += 1
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print "Exiting ..."

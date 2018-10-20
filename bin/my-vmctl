@@ -107,6 +107,20 @@ _split() {
 }
 
 
+_splitex() {
+    local _opt _list _prefix
+    _opt=$1
+    _list=$2
+    _prefix=$3
+    if test -n "${_prefix}"
+    then
+        echo ${_list} | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"${_opt} '${_prefix},%s' \", a[i]; }"
+    else
+        echo ${_list} | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"${_opt} '%s' \", a[i]; }"
+    fi
+}
+
+
 _abspath() {
     if echo $1 | grep -q '^/'
     then
@@ -455,6 +469,50 @@ _install_uefi() {
 }
 
 
+_install_uefi_ng() {
+    local _distro _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
+
+    _distro=$1
+    _disk=$2
+    _mac=$3
+    _cdev=$4
+    _hostname=$5
+    _vmname=$6
+
+    var_required _distro _disk _mac _cdev _hostname _vmname
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768,wait"
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    file_required $_bootrom
+
+    _tap=`_pick_tap`
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        local _distropt="`_splitex --cdrom $distro_switch`"
+        minbhyve_opts="${minbhyve_opts} --lpc bootrom,${_bootrom}"
+        minbhyve_opts="${minbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
+        minbhyve_opts="${minbhyve_opts} --extra s,30:0,xhci,tablet"
+        _do_it "minbhyve $minbhyve_opts  ${_distropt} ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
 _run() {
     local _disk _tap _mac _vmname _cdevnum _answer _cdev
 
@@ -617,6 +675,46 @@ _run_uefi() {
         mybhyve_opts="${mybhyve_opts} -E 30:0,xhci,tablet"
         mybhyve_opts="${mybhyve_opts} -l bootrom,${_bootrom}"
         _do_it "my-bhyve $mybhyve_opts ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_uefi_ng() {
+    local _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
+
+    _disk=$1
+    _mac=$2
+    _cdev=$3
+    _hostname=$4
+    _vmname=$5
+
+    var_required _disk _mac _cdev _hostname _vmname
+    _fbuf="tcp=${_hostname}:$(( 5900 + $_cdev )),w=1024,h=768"
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+    _bootrom='/usr/local/share/uefi-firmware/BHYVE_UEFI.fd'
+    file_required $_bootrom
+
+    _tap=`_pick_tap`
+    echo "disk: ${_disk}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "fbuf: ${_fbuf}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        minbhyve_opts="${minbhyve_opts} --lpc bootrom,${_bootrom}"
+        minbhyve_opts="${minbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
+        minbhyve_opts="${minbhyve_opts} --extra s,30:0,xhci,tablet"
+        _do_it "minbhyve $minbhyve_opts ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -882,7 +980,9 @@ fi
 batch=1
 dryrun=
 mybhyve_opts='-u3'
+minbhyve_opts='--busid-start 3'
 disk_switch=-d
+disk_emul=ahci-hd
 distro_switch=-I
 
 args=`getopt bE:im:M:nP: $*`
@@ -897,11 +997,13 @@ do
         -b)
             shift
             disk_switch=-b
+            disk_emul=virtio-blk
         ;;
 
         -E)
             shift
             mybhyve_opts="$mybhyve_opts -E $1"
+            minbhyve_opts="$minbhyve_opts --extra '$1'"
             shift
         ;;
 
@@ -914,12 +1016,14 @@ do
         -m)
             shift
             mybhyve_opts="$mybhyve_opts -m $1"
+            minbhyve_opts="$minbhyve_opts --memory $1"
             shift
         ;;
 
         -M)
             shift
             mybhyve_opts="$mybhyve_opts -M $1"
+            minbhyve_opts="$minbhyve_opts --ncpu $1"
             shift
         ;;
 
@@ -927,6 +1031,7 @@ do
             shift
             dryrun=1
             mybhyve_opts="$mybhyve_opts -n"
+            minbhyve_opts="$minbhyve_opts --dryrun"
         ;;
 
         -P)
@@ -1097,6 +1202,11 @@ elif test "$1" = "run-uefi"
 then
     shift
     _run_uefi $1 $2 $3 $4 $5
+
+elif test "$1" = "run-uefi-ng"
+then
+    shift
+    _run_uefi_ng $1 $2 $3 $4 $5
 
 elif test "$1" = "runalt"
 then
