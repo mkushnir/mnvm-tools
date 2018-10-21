@@ -5,7 +5,7 @@ then
     mnvm_idx_offset=0
     mnvm_tag=freebsd-11
     mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
-    mnvm_simple_preset=run_simple_uefi_preset
+    mnvm_simple_preset=run_simple_freebsd_preset
 
 elif test "$MY_VMCTL_PLATENV" = "ubuntu-18"
 then
@@ -14,7 +14,7 @@ then
     #mnvm_iso=ubuntu-18.04-desktop-amd64.iso
     #mnvm_iso=ubuntu-18.04-server-amd64.iso
     mnvm_iso=ubuntu-18.04-live-server-amd64.iso
-    mnvm_simple_preset=run_simple_uefi_preset
+    mnvm_simple_preset=run_simple_linux_preset
 
 elif test "$MY_VMCTL_PLATENV" = "centos-7"
 then
@@ -23,7 +23,7 @@ then
     #mnvm_iso=CentOS-7-x86_64-Everything-1708.iso
     #mnvm_iso=CentOS-7-x86_64-Minimal-1804.iso
     mnvm_iso=CentOS-7-x86_64-Everything-1804.iso
-    mnvm_simple_preset=run_simple_uefi_preset
+    mnvm_simple_preset=run_simple_linux_preset
 
 elif test "$MY_VMCTL_PLATENV" = "windows-7"
 then

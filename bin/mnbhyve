@@ -34,13 +34,13 @@ def safestr(s):
 def vm_run(*args):
     name = args[-1]
     if dryrun:
-        _dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
+        #_dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
         _dryrun_command(bhyve, *(safestr(i) for i in args))
         return -1
     else:
-        _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
+        #_run_command(bhyvectl, '--vm=%s' % name, '--destroy')
         p, out = _run_command(bhyve, *(safestr(i) for i in args))
-        print out
+        #print out
         return p.returncode
 
 def vm_destroy(name):
@@ -116,16 +116,19 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--dryrun', action='store_true', help='Do not actually run commands')
-    parser.add_argument('--cdrom', action='append', help='CD ROM device specification', metavar='PATH')
-    parser.add_argument('--disk', action='append', help='Hard disk device specification', metavar='EMUL,PATH')
-    parser.add_argument('--net', action='append', help='Network device specification', metavar='EMUL,TAP,mac=MAC')
+
+    parser.add_argument('--cdrom', action='append', help='CD ROM device specification (--disk ahci-cd specialization)', metavar='PATH')
+    parser.add_argument('--disk', action='append', help='Hard disk device specification (--pci specialization)', metavar='EMUL,PATH')
+    parser.add_argument('--net', action='append', help='Network device specification (--pci specialization)', metavar='EMUL,TAP,mac=MAC')
+    parser.add_argument('--pci', action='append', help='PCI device specification', metavar='EMUL,CONF')
+    parser.add_argument('--extra', action='append', help='bhyve extra option', metavar='ARG[,VAL...]')
+    parser.add_argument('--busid-start', type=int, help='PCI bus ID start for devices', metavar='NUM', default=1)
+
     parser.add_argument('--lpc', action='append', help='LPC device specification', metavar='EMUL,CONF')
     parser.add_argument('--memory', action='store', help='Physical memory size', metavar='SIZE', default='512M')
     parser.add_argument('--ncpu', action='store', type=int, help='Number of CPUs', metavar='NUM', default=1)
     parser.add_argument('--pincpu', action='append', help='Virtual-to-host cpu pin', metavar='V:H', default=['0:0'])
-    parser.add_argument('--pci', action='append', help='PCI device specification', metavar='EMUL,CONF')
-    parser.add_argument('--busid-start', type=int, help='PCI bus ID start for devices', metavar='NUM', default=1)
-    parser.add_argument('--extra', action='append', help='bhyve extra option', metavar='ARG[,VAL...]')
+
     parser.add_argument('name', help='bhyve guest name', metavar='NAME')
     args = parser.parse_args()
     assert (args.busid_start > 0)

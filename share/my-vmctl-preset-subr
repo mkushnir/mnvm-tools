@@ -399,52 +399,26 @@ run_simple_freebsd_preset () {
 }
 
 
-run_simple_windows_preset () {
-    local _cmd _ddev _hostaddr
-
-    my-vmctl destroy $mnvm_name
-    if test "$1" = "install"
-    then
-        var_required mnvm_iso
-        _cmd=install-windows
-        _ddev=`newvol $mnvm_disk $mnvm_size`
-        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso|/dev/null"
-
-    elif test "$1" = "run"
-    then
-        _cmd=run-windows
-        _ddev=`getvol $mnvm_disk $mnvm_size`
-        mnvm_iso=/dev/null
-
-    else
-        usage
-        return 1
-    fi
-
-    #export DEBUG=yes
-    _hostaddr=`my_hostaddr`
-    var_required _hostaddr
-    my-vmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
-}
-
-
-run_simple_uefi_preset () {
+run_simple_linux_preset () {
     local _cmd _ddev _cdisk _hostaddr
 
     my-vmctl destroy $mnvm_name
     if test "$1" = "install"
     then
+        local _mnvm_iso
+
         var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $mnvm_disk $mnvm_size`
-        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso|/dev/null"
-        file_required $mnvm_iso
+        _mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        file_required ${_mnvm_iso}
+        mnvm_iso="${_mnvm_iso}|/dev/null"
         configure_linux
 
     elif test "$1" = "run"
     then
         _cmd=run-uefi
-        _ddev=`getvol $mnvm_disk $mnvm_size`
+        _ddev=`getvol $mnvm_disk`
         mnvm_iso=
 
     elif test "$1" = "clone"
@@ -474,6 +448,39 @@ run_simple_uefi_preset () {
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
     mnvmctl -M1 $B_opt $_cmd "$mnvm_iso" "$_ddev|${_cdisk}" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
+}
+
+
+run_simple_windows_preset () {
+    local _cmd _ddev _hostaddr
+
+    my-vmctl destroy $mnvm_name
+    if test "$1" = "install"
+    then
+        local _mnvm_iso
+
+        var_required mnvm_iso
+        _cmd=install-windows
+        _ddev=`newvol $mnvm_disk $mnvm_size`
+        _mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        file_required ${_mnvm_iso}
+        mnvm_iso="${_mnvm_iso}|/dev/null"
+
+    elif test "$1" = "run"
+    then
+        _cmd=run-windows
+        _ddev=`getvol $mnvm_disk`
+        mnvm_iso=/dev/null
+
+    else
+        usage
+        return 1
+    fi
+
+    #export DEBUG=yes
+    _hostaddr=`my_hostaddr`
+    var_required _hostaddr
+    my-vmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
 

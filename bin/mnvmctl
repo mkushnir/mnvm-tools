@@ -324,12 +324,12 @@ _install_uefi() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
+        local _distropt="`_splitex --cdrom ${_distro}`"
         local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
-        local _distropt="`_splitex --cdrom $distro_switch`"
         mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
-        _do_it "mnbhyve $mnbhyve_opts  ${_distropt} ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+        _do_it "mnbhyve $mnbhyve_opts ${_distropt} ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -551,9 +551,7 @@ fi
 batch=1
 dryrun=
 mnbhyve_opts='--busid-start 3'
-disk_switch=-d
 disk_emul=ahci-hd
-distro_switch=-I
 
 args=`getopt bE:m:M:n $*`
 if test $? -ne 0
@@ -566,7 +564,6 @@ do
     case "$1" in
         -b)
             shift
-            disk_switch=-b
             disk_emul=virtio-blk
         ;;
 
