@@ -1,4 +1,4 @@
-MIN#!/bin/sh
+#!/bin/sh
 
 if test "$MY_VMCTL_HOSTENV" = "big"
 then
