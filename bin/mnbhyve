@@ -55,10 +55,14 @@ def vm_run(*a):
 
 def vm_status(name):
     p, out = _run_command(bhyvectl, '--vm=%s' % name, '--get-exit-reason')
-    if re.match(r'^.*\s0x1e$', out):
-        return 'exited'
+    if re.match(r'^.*\s0x1$', out):
+        return 'vmx'
+    elif re.match(r'^.*\s0xa$', out):
+        return 'spin-ap'
     elif re.match(r'^.*\s0xc$', out):
         return 'running'
+    elif re.match(r'^.*\s0x1e$', out):
+        return 'exited'
     else:
         return 'unknown[%s]' % out
 
