@@ -97,11 +97,6 @@ prog_required () {
 
 
 _split() {
-    echo $2 | awk "{ n = split(\$0, a, \"|\"); for (i = 1; i <= n; ++i) printf \"$1 '%s' \", a[i]; }"
-}
-
-
-_splitex() {
     local _opt _list _prefix
     _opt=$1
     _list=$2
@@ -324,8 +319,8 @@ _install_uefi() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _distropt="`_splitex --cdrom ${_distro}`"
-        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        local _distropt="`_split --cdrom ${_distro}`"
+        local _diskopt="`_split --disk ${_disk} ${disk_emul}`"
         mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
@@ -365,7 +360,7 @@ _run_uefi() {
     read -p "Continue? [y/N]> " _answer
     if test "${_answer}" = "y"
     then
-        local _diskopt="`_splitex --disk ${_disk} ${disk_emul}`"
+        local _diskopt="`_split --disk ${_disk} ${disk_emul}`"
         mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
@@ -529,15 +524,17 @@ _send_script() {
 
 # main
 #
-standard_labels="root swap var tmp work usr data"
-nonshared_mounts="/ /dev /var /tmp /work /usr"
-shared_mounts="/data0 /data1"
-
 set -e
 if test -n "$DEBUG"
 then
     set -x
 fi
+
+standard_labels="root swap var tmp work usr data"
+nonshared_mounts="/ /dev /var /tmp /work /usr"
+shared_mounts="/data0 /data1"
+
+prog_required python
 
 _zfs=
 if zpool list >/dev/null 2>&1
