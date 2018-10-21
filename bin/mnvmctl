@@ -2,7 +2,7 @@
 
 usage() {
     echo "Usage:"
-    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ] COMMAND [ args ]"
+    echo "[ DEBUG=1 ] `basename $0` [ -b ] [ -f ] [ -E opt ] [ -i ] [ -m memsz ] [ -M numcpu ] [ -n ] [ -P pinnednum ] COMMAND [ args ]"
     echo
     echo "Commands:"
     echo "    setup [altroot]"
@@ -374,8 +374,7 @@ _run_uefi() {
 _poweroff() {
     if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
     then
-        echo "Powering off $1 ..."
-        _do_it "bhyvectl --vm=$1 --force-poweroff"
+        _do_it "mnbhyve --poweroff $1"
     else
         echo "No such vm: $1"
         return 1
@@ -386,8 +385,7 @@ _poweroff() {
 _reset() {
     if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
     then
-        echo "Re-setting $1 ..."
-        _do_it "bhyvectl --vm=$1 --force-reset"
+        _do_it "mnbhyve --reset $1"
     else
         echo "No such vm: $1"
         return 1
@@ -396,7 +394,14 @@ _reset() {
 }
 
 _destroy() {
-    _do_it "bhyvectl --vm=$1 --destroy"
+    local _status
+    _status="`mnbhyve --status $1`"
+    if test "${_status}" = 'running' -a -z "$force"
+    then
+        echo "Cannot destroy a running instance: $1.  To force, pass -f."
+        exit 1
+    fi
+    _do_it "mnbhyve --destroy $1"
     return 0
 }
 
@@ -549,8 +554,9 @@ batch=1
 dryrun=
 mnbhyve_opts='--busid-start 3'
 disk_emul=ahci-hd
+force=
 
-args=`getopt bE:m:M:n $*`
+args=`getopt bE:fm:M:n $*`
 if test $? -ne 0
 then
     exit 1
@@ -568,6 +574,11 @@ do
             shift
             mnbhyve_opts="$mnbhyve_opts --extra '$1'"
             shift
+        ;;
+
+        -f)
+            shift
+            force=1
         ;;
 
         -m)
@@ -616,16 +627,7 @@ then
     then
         for i in `ls /dev/vmm | sort`
         do
-            _er=`bhyvectl --vm=$i --get-exit-reason`
-            if echo ${_er} | grep -q ' 0x1e$'
-            then
-                echo "$i (exited)"
-            elif echo ${_er} | grep -q ' 0xc$'
-            then
-                echo "$i (running)"
-            else
-                echo "$i (unknown)"
-            fi
+            echo "$i (`mnbhyve --status $i`)"
         done
     else
         echo "No instances"
@@ -638,7 +640,8 @@ then
 elif test "$1" = "poweroff"
 then
     _poweroff $2
-    _destroy $2
+    #force=1
+    #_destroy $2
 
 elif test "$1" = "reset"
 then
@@ -660,7 +663,8 @@ then
 elif test "$1" = "poweroffalt"
 then
     _poweroff altroot
-    _destroy altroot
+    #force=1
+    #_destroy altroot
 
 elif test "$1" = "resetalt"
 then
@@ -702,6 +706,7 @@ then
     # linkalt host
     if test -d /dev/vmm
     then
+        force=1
         for i in `ls /dev/vmm`
         do
             _destroy $i

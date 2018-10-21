@@ -9,20 +9,30 @@ import time
 
 bhyvectl = '/usr/sbin/bhyvectl'
 bhyve = '/usr/sbin/bhyve'
-dryrun = False
+args = None
+_run_command = None
 
 
-def _dryrun_command(*args):
-    print "Running:", ' '.join(args)
+def _dryrun_command(*a):
+    print "Running:", ' '.join(a)
 
 
-def _run_command(*args):
-    #print "Running:", ' '.join(args)
-    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def _run_command_capture(*a):
+    #print "Running:", ' '.join(a)
+    p = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _stdout, _stderr = p.communicate()
-    if _stderr:
-        print >>sys.stderr, _stderr.strip()
+    #if _stdout:
+    #    print >>sys.stdout, _stdout.strip()
+    #if _stderr:
+    #    print >>sys.stderr, _stderr.strip()
     return p, _stdout.strip()
+
+
+def _run_command_pass_through(*a):
+    #print "Running:", ' '.join(a)
+    p = subprocess.Popen(a)
+    p.communicate()
+    return p, ''
 
 
 def safestr(s):
@@ -31,23 +41,17 @@ def safestr(s):
     return ''
 
 
-def vm_run(*args):
-    name = args[-1]
-    if dryrun:
+def vm_run(*a):
+    name = a[-1]
+    if args.dryrun:
         #_dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
-        _dryrun_command(bhyve, *(safestr(i) for i in args))
+        _dryrun_command(bhyve, *(safestr(i) for i in a))
         return -1
     else:
         #_run_command(bhyvectl, '--vm=%s' % name, '--destroy')
-        p, out = _run_command(bhyve, *(safestr(i) for i in args))
-        #print out
+        p, out = _run_command(bhyve, *(safestr(i) for i in a))
         return p.returncode
 
-def vm_destroy(name):
-    if dryrun:
-        _dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
-    else:
-        _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
 
 def vm_status(name):
     p, out = _run_command(bhyvectl, '--vm=%s' % name, '--get-exit-reason')
@@ -56,10 +60,31 @@ def vm_status(name):
     elif re.match(r'^.*\s0xc$', out):
         return 'running'
     else:
-        return 'unknown'
+        return 'unknown[%s]' % out
 
 
-def build_bhyve_args(args, idx):
+def vm_reset(name):
+    if args.dryrun:
+        _dryrun_command(bhyvectl, '--vm=%s' % name, '--force-reset')
+    else:
+        _run_command(bhyvectl, '--vm=%s' % name, '--force-reset')
+
+
+def vm_poweroff(name):
+    if args.dryrun:
+        _dryrun_command(bhyvectl, '--vm=%s' % name, '--force-poweroff')
+    else:
+        _run_command(bhyvectl, '--vm=%s' % name, '--force-poweroff')
+
+
+def vm_destroy(name):
+    if args.dryrun:
+        _dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
+    else:
+        _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
+
+
+def build_bhyve_args(idx):
     busid = args.busid_start
     consid = 0
     pci_devices = ['0:0,hostbridge']
@@ -111,33 +136,99 @@ def build_bhyve_args(args, idx):
     res.append(args.name)
     return res
 
+
 def main():
-    global dryrun
+    global args, _run_command
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dryrun', action='store_true', help='Do not actually run commands')
+    parser.add_argument('--dryrun',
+        action='store_true', help='Do not actually run commands')
+    parser.add_argument('--pass-through-output',
+        action='store_true', default=False,
+        help='Pipe output through.  Default is to capture.')
 
-    parser.add_argument('--cdrom', action='append', help='CD ROM device specification (--disk ahci-cd specialization)', metavar='PATH')
-    parser.add_argument('--disk', action='append', help='Hard disk device specification (--pci specialization)', metavar='EMUL,PATH')
-    parser.add_argument('--net', action='append', help='Network device specification (--pci specialization)', metavar='EMUL,TAP,mac=MAC')
-    parser.add_argument('--pci', action='append', help='PCI device specification', metavar='EMUL,CONF')
-    parser.add_argument('--extra', action='append', help='bhyve extra option', metavar='ARG[,VAL...]')
-    parser.add_argument('--busid-start', type=int, help='PCI bus ID start for devices', metavar='NUM', default=1)
+    parser.add_argument('--cdrom',
+        action='append',
+        help='CD ROM device specification (--disk ahci-cd specialization)',
+        metavar='PATH')
+    parser.add_argument('--disk',
+        action='append',
+        help='Hard disk device specification (--pci specialization)',
+        metavar='EMUL,PATH')
+    parser.add_argument('--net',
+        action='append',
+        help='Network device specification (--pci specialization)',
+        metavar='EMUL,TAP,mac=MAC')
+    parser.add_argument('--pci',
+        action='append',
+        help='PCI device specification', metavar='EMUL,CONF')
+    parser.add_argument('--extra',
+        action='append',
+        help='bhyve extra option', metavar='ARG[,VAL...]')
+    parser.add_argument('--busid-start',
+        type=int, help='PCI bus ID start for devices',
+        metavar='NUM', default=1)
 
-    parser.add_argument('--lpc', action='append', help='LPC device specification', metavar='EMUL,CONF')
-    parser.add_argument('--memory', action='store', help='Physical memory size', metavar='SIZE', default='512M')
-    parser.add_argument('--ncpu', action='store', type=int, help='Number of CPUs', metavar='NUM', default=1)
-    parser.add_argument('--pincpu', action='append', help='Virtual-to-host cpu pin', metavar='V:H', default=['0:0'])
+    parser.add_argument('--lpc',
+        action='append',
+        help='LPC device specification', metavar='EMUL,CONF')
+    parser.add_argument('--memory',
+        action='store',
+        help='Physical memory size', metavar='SIZE', default='512M')
+    parser.add_argument('--ncpu',
+        action='store', type=int,
+        help='Number of CPUs', metavar='NUM', default=1)
+    parser.add_argument('--pincpu',
+        action='append',
+        help='Virtual-to-host cpu pin', metavar='V:H', default=['0:0'])
 
-    parser.add_argument('name', help='bhyve guest name', metavar='NAME')
+    parser.add_argument('--status',
+        action='store_true',
+        help='Print status and exit')
+
+    parser.add_argument('--reset',
+        action='store_true', help='Reset')
+
+    parser.add_argument('--poweroff',
+        action='store_true', help='Power off')
+
+    parser.add_argument('--destroy',
+        action='store_true', help='Destroy')
+
+    parser.add_argument('name',
+        help='bhyve guest name', metavar='NAME')
+
     args = parser.parse_args()
     assert (args.busid_start > 0)
 
-    dryrun = args.dryrun
+    if args.pass_through_output and not args.status:
+        _run_command = _run_command_pass_through
+    else:
+        _run_command = _run_command_capture
+
+    if args.status:
+        status = vm_status(args.name)
+        print status
+        return
+
+    if args.reset:
+        vm_reset(args.name)
+        print "Reset", args.name
+        return
+
+    if args.poweroff:
+        vm_poweroff(args.name)
+        print "Powered off", args.name
+        return
+
+    if args.destroy:
+        vm_destroy(args.name)
+        print "Destroyed", args.name
+        return
 
     i = 0
     while True:
-        bhyve_args = build_bhyve_args(args, i)
+        bhyve_args = build_bhyve_args(i)
         try:
             rc = vm_run(*bhyve_args)
         except (KeyboardInterrupt, Exception):
