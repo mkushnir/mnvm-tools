@@ -145,7 +145,7 @@ clone_dataset () {
         then
             if test -z "$mnvm_force"
             then
-                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run mnvmctl destroy-image ${_ddev}"
                 exit 1
             else
                 zfs destroy ${_ddev}
@@ -168,7 +168,7 @@ clone_dataset () {
         then
             if test -z "$mnvm_force"
             then
-                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run my-vmctl destroy-image ${_ddev}"
+                echo "Already exists ${_ddev}. Set mnvm_force=1 in the preset file or run mnvmctl destroy-image ${_ddev}"
                 exit 1
             else
                 rm -f -v ${_ddev}
@@ -340,24 +340,13 @@ EOD
     #find /mnt -ls
     umount /mnt
     mdconfig -d -u ${_mdev}
-
-    #stty -echo
-    #read -p "Password: " _passwd
-    #stty echo
-    #sed -e \
-    #    "s/^mnvm_node_id=.*$/mnvm_node_id=$mnvm_node_id/" \
-    #    -e "s/^__secure__:password$/__secure__:$_passwd/" \
-    #        <my-vmctl-preset-config-ubuntu \
-    #        > .my-vmctl-preset-config-ubuntu-tmp
-    #my-vmctl send-script $mnvm_cdev .my-vmctl-preset-config-ubuntu-tmp
-    #rm .my-vmctl-preset-config-ubuntu-tmp
 }
 
 
 run_simple_freebsd_preset () {
     local _cmd _ddev _hostaddr
 
-    my-vmctl destroy $mnvm_name
+    mnvmctl destroy $mnvm_name
     if test "$1" = "install"
     then
         var_required mnvm_iso
@@ -402,7 +391,7 @@ run_simple_freebsd_preset () {
 run_simple_linux_preset () {
     local _cmd _ddev _cdisk _hostaddr
 
-    my-vmctl destroy $mnvm_name
+    mnvmctl destroy $mnvm_name
     if test "$1" = "install"
     then
         local _mnvm_iso
@@ -454,7 +443,7 @@ run_simple_linux_preset () {
 run_simple_windows_preset () {
     local _cmd _ddev _hostaddr
 
-    my-vmctl destroy $mnvm_name
+    mnvmctl destroy $mnvm_name
     if test "$1" = "install"
     then
         local _mnvm_iso
@@ -480,7 +469,7 @@ run_simple_windows_preset () {
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
-    my-vmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
+    mnvmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
 
