@@ -1,13 +1,13 @@
 #!/bin/sh
 
-if test "$MY_VMCTL_PLATENV" = "freebsd-11"
+if test "$MNVMCTL_PLATENV" = "freebsd-11"
 then
     mnvm_idx_offset=0
     mnvm_tag=freebsd-11
     mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
     mnvm_simple_preset=run_simple_freebsd_preset
 
-elif test "$MY_VMCTL_PLATENV" = "ubuntu-18"
+elif test "$MNVMCTL_PLATENV" = "ubuntu-18"
 then
     mnvm_idx_offset=16
     mnvm_tag=ubuntu-18
@@ -16,7 +16,7 @@ then
     mnvm_iso=ubuntu-18.04-live-server-amd64.iso
     mnvm_simple_preset=run_simple_linux_preset
 
-elif test "$MY_VMCTL_PLATENV" = "centos-7"
+elif test "$MNVMCTL_PLATENV" = "centos-7"
 then
     mnvm_idx_offset=32
     mnvm_tag=centos-7
@@ -25,7 +25,7 @@ then
     mnvm_iso=CentOS-7-x86_64-Everything-1804.iso
     mnvm_simple_preset=run_simple_linux_preset
 
-elif test "$MY_VMCTL_PLATENV" = "windows-7"
+elif test "$MNVMCTL_PLATENV" = "windows-7"
 then
     mnvm_idx_offset=48
     mnvm_tag=windows-7
@@ -34,13 +34,13 @@ then
     mnvm_iso=pcriver.com_win_7_64bit_ult-remastered.iso
     mnvm_simple_preset=run_simple_windows_preset
 
-elif test "$MY_VMCTL_PLATENV" = "windows-10"
+elif test "$MNVMCTL_PLATENV" = "windows-10"
 then
     mnvm_idx_offset=48
     mnvm_tag=windows-10
     mnvm_iso=Win10_1803_Ukrainian_x64-remastered.iso
     mnvm_simple_preset=run_simple_windows_preset
 else
-    echo MY_VMCTL_PLATENV is not set
+    echo MNVMCTL_PLATENV is not set
     exit 1;
 fi

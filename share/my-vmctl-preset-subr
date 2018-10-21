@@ -7,9 +7,9 @@ usage () {
 
 
 my_hostaddr () {
-    if test -n "$MY_VMCTL_HOSTNAME"
+    if test -n "$MNVMCTL_HOSTNAME"
     then
-        host $MY_VMCTL_HOSTNAME | grep 'has address' | awk '{print $4;}'
+        host $MNVMCTL_HOSTNAME | grep 'has address' | awk '{print $4;}'
     else
         host `hostname` | grep 'has address' | awk '{print $4;}'
     fi
@@ -88,7 +88,7 @@ prog_required () {
 getvol () {
     local _vol _name
     _name=$1
-    _vol=$MY_VMCTL_DISK/$_name
+    _vol=$MNVMCTL_DISK/$_name
     echo $_vol
 }
 
@@ -96,7 +96,7 @@ getvol () {
 getdataset () {
     local _dataset _name
     _name=$1
-    _dataset=$MY_VMCTL_POOL/$_name
+    _dataset=$MNVMCTL_POOL/$_name
     echo $_dataset
 }
 
@@ -248,10 +248,10 @@ configure_linux () {
     _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
     var_required _hostname
 
-    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
+    _cdisk="$MNVMCTL_CFG/${mnvm_disk}.cfg"
     rm -f ${_cdisk}
 
-    if test -n "$MY_VMCTL_CFG_NTFS3G"
+    if test -n "$MNVMCTL_CFG_NTFS3G"
     then
         prog_required mkntfs ntfs-3g
 
@@ -260,7 +260,7 @@ configure_linux () {
         _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
         ntfs-3g /dev/${_mdev} /mnt
 
-    elif test -n "$MY_VMCTL_CFG_MSDOS"
+    elif test -n "$MNVMCTL_CFG_MSDOS"
     then
         newfs_msdos -S 512 -c 1 -C 33M -F 32 ${_cdisk}
         _mdev=`mdconfig -a -t vnode -f ${_cdisk}`
@@ -352,7 +352,7 @@ run_simple_freebsd_preset () {
         var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $mnvm_disk $mnvm_size`
-        mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        mnvm_iso="$MNVMCTL_ISO/$mnvm_iso"
         file_required $mnvm_iso
 
     elif test "$1" = "run"
@@ -399,7 +399,7 @@ run_simple_linux_preset () {
         var_required mnvm_iso
         _cmd=install-uefi
         _ddev=`newvol $mnvm_disk $mnvm_size`
-        _mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        _mnvm_iso="$MNVMCTL_ISO/$mnvm_iso"
         file_required ${_mnvm_iso}
         mnvm_iso="${_mnvm_iso}|/dev/null"
         configure_linux
@@ -431,7 +431,7 @@ run_simple_linux_preset () {
         return 1
     fi
 
-    _cdisk="$MY_VMCTL_CFG/${mnvm_disk}.cfg"
+    _cdisk="$MNVMCTL_CFG/${mnvm_disk}.cfg"
 
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
@@ -451,7 +451,7 @@ run_simple_windows_preset () {
         var_required mnvm_iso
         _cmd=install-windows
         _ddev=`newvol $mnvm_disk $mnvm_size`
-        _mnvm_iso="$MY_VMCTL_ISO/$mnvm_iso"
+        _mnvm_iso="$MNVMCTL_ISO/$mnvm_iso"
         file_required ${_mnvm_iso}
         mnvm_iso="${_mnvm_iso}|/dev/null"
 
@@ -477,25 +477,25 @@ run_simple_windows_preset () {
 
 _zfs=
 # pool: for zfs hosting
-# MY_VMCTL_POOL=
+# MNVMCTL_POOL=
 # root dir: for ISO images
-# MY_VMCTL_ISO=
+# MNVMCTL_ISO=
 # root dir: for cof images
-# MY_VMCTL_CFG=
+# MNVMCTL_CFG=
 # dev dir: for disk devices
-# MY_VMCTL_DISK=
+# MNVMCTL_DISK=
 B_opt=
 if zpool list >/dev/null 2>&1
 then
-    if test -n "$MY_VMCTL_DDEV_ZFS"
+    if test -n "$MNVMCTL_DDEV_ZFS"
     then
         _zfs=1
         B_opt=-b
-        var_required MY_VMCTL_POOL MY_VMCTL_ISO MY_VMCTL_CFG MY_VMCTL_DISK
+        var_required MNVMCTL_POOL MNVMCTL_ISO MNVMCTL_CFG MNVMCTL_DISK
     else
-        var_required MY_VMCTL_ISO MY_VMCTL_CFG MY_VMCTL_DISK
+        var_required MNVMCTL_ISO MNVMCTL_CFG MNVMCTL_DISK
     fi
-    dir_required $MY_VMCTL_ISO $MY_VMCTL_CFG $MY_VMCTL_DISK
+    dir_required $MNVMCTL_ISO $MNVMCTL_CFG $MNVMCTL_DISK
 fi
 
 # Required variables:

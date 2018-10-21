@@ -1,25 +1,25 @@
 #!/bin/sh
 
-if test "$MY_VMCTL_HOSTENV" = "big"
+if test "$MNVMCTL_HOSTENV" = "big"
 then
-    #MY_VMCTL_DDEV_ZFS=
-    #MINVMCTL_DDEV_ZFS=
-    MY_VMCTL_ISO=/data0/mkushnir/vm/iso
-    MY_VMCTL_CFG=/data0/mkushnir/vm/diskdev
-    MY_VMCTL_DISK=/data0/mkushnir/vm/diskdev
-    MY_VMCTL_HOSTNAME=localhost
+    #MNVMCTL_DDEV_ZFS=
+    #MNVMCTL_DDEV_ZFS=
+    MNVMCTL_ISO=/data0/mkushnir/vm/iso
+    MNVMCTL_CFG=/data0/mkushnir/vm/diskdev
+    MNVMCTL_DISK=/data0/mkushnir/vm/diskdev
+    MNVMCTL_HOSTNAME=localhost
     mnvm_net=10.1.2
-elif test "$MY_VMCTL_HOSTENV" = "skyrta"
+elif test "$MNVMCTL_HOSTENV" = "skyrta"
 then
-    MY_VMCTL_DDEV_ZFS=1
-    MINVMCTL_DDEV_ZFS=1
-    MY_VMCTL_POOL=skyrta
-    MY_VMCTL_ISO=/$MY_VMCTL_POOL/vm/iso
-    MY_VMCTL_CFG=/$MY_VMCTL_POOL/vm/cfg
-    MY_VMCTL_DISK=/dev/zvol/$MY_VMCTL_POOL
-    #MY_VMCTL_HOSTNAME=localhost
+    MNVMCTL_DDEV_ZFS=1
+    MNVMCTL_DDEV_ZFS=1
+    MNVMCTL_POOL=skyrta
+    MNVMCTL_ISO=/$MNVMCTL_POOL/vm/iso
+    MNVMCTL_CFG=/$MNVMCTL_POOL/vm/cfg
+    MNVMCTL_DISK=/dev/zvol/$MNVMCTL_POOL
+    #MNVMCTL_HOSTNAME=localhost
     mnvm_net=10.1.3
 else
-    echo MY_VMCTL_HOSTENV is not set
+    echo MNVMCTL_HOSTENV is not set
     exit 1;
 fi

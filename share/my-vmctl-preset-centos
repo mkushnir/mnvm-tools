@@ -1,10 +1,10 @@
 #!/bin/sh
 
-#MY_VMCTL_HOSTENV=skyrta
-MY_VMCTL_HOSTENV=big
+MNVMCTL_HOSTENV=skyrta
+#MNVMCTL_HOSTENV=big
 . ./my-vmctl-preset-hostenv
 
-MY_VMCTL_PLATENV=centos-7
+MNVMCTL_PLATENV=centos-7
 . ./my-vmctl-preset-platenv
 
 mnvm_size=64G
