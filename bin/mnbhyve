@@ -135,7 +135,6 @@ def main():
 
     dryrun = args.dryrun
 
-    vm_destroy(args.name)
     i = 0
     while True:
         bhyve_args = build_bhyve_args(args, i)
