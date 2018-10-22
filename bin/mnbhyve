@@ -8,6 +8,7 @@ import subprocess
 import time
 
 bhyvectl = '/usr/sbin/bhyvectl'
+bhyveload = '/usr/sbin/bhyveload'
 bhyve = '/usr/sbin/bhyve'
 args = None
 _run_command = None
@@ -21,10 +22,6 @@ def _run_command_capture(*a):
     #print "Running:", ' '.join(a)
     p = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _stdout, _stderr = p.communicate()
-    #if _stdout:
-    #    print >>sys.stdout, _stdout.strip()
-    #if _stderr:
-    #    print >>sys.stderr, _stderr.strip()
     return p, _stdout.strip()
 
 
@@ -41,30 +38,49 @@ def safestr(s):
     return ''
 
 
+def vm_load(*a):
+    name = a[-1]
+    if args.dryrun:
+        _dryrun_command(bhyveload, *(safestr(i) for i in a))
+        return -1
+    else:
+        p, out = _run_command(bhyveload, *(safestr(i) for i in a))
+        return p.returncode
+
 def vm_run(*a):
     name = a[-1]
     if args.dryrun:
-        #_dryrun_command(bhyvectl, '--vm=%s' % name, '--destroy')
         _dryrun_command(bhyve, *(safestr(i) for i in a))
         return -1
     else:
-        #_run_command(bhyvectl, '--vm=%s' % name, '--destroy')
         p, out = _run_command(bhyve, *(safestr(i) for i in a))
         return p.returncode
 
 
+re_inout = re.compile(r'^.*\s0$')
+re_vmx = re.compile(r'^.*\s0x1$')
+re_spin_up = re.compile(r'^.*\s0xa$')
+re_running = re.compile(r'^.*\s0xc$')
+re_exited = re.compile(r'^.*\s0x1e$')
+re_unknown = re.compile(r'^.*\s(\S+)$')
 def vm_status(name):
     p, out = _run_command(bhyvectl, '--vm=%s' % name, '--get-exit-reason')
-    if re.match(r'^.*\s0x1$', out):
+    if re_inout.match(out):
+        return 'inout'
+    elif re_vmx.match(out):
         return 'vmx'
-    elif re.match(r'^.*\s0xa$', out):
+    elif re_spin_up.match(out):
         return 'spin-ap'
-    elif re.match(r'^.*\s0xc$', out):
+    elif re_running.match(out):
         return 'running'
-    elif re.match(r'^.*\s0x1e$', out):
+    elif re_exited.match(out):
         return 'exited'
     else:
-        return 'unknown[%s]' % out
+        m = re_unknown.match(out)
+        if m:
+            return 'unknown[%s]' % m.group(1)
+        else:
+            return 'unknown[%s]' % out
 
 
 def vm_reset(name):
@@ -87,6 +103,21 @@ def vm_destroy(name):
     else:
         _run_command(bhyvectl, '--vm=%s' % name, '--destroy')
 
+
+def build_bhyveload_args():
+    res = []
+    if args.loader:
+        res.extend(['-l', args.loader])
+    if args.loader_console:
+        res.extend(['-c', args.loader_console])
+    if args.loader_image:
+        res.extend(['-d', args.loader_image])
+    if args.loader_env:
+        for i in args.loader_env:
+            res.extend(['-e', i])
+    res.extend(['-m', args.memory])
+    res.append(args.name)
+    return res
 
 def build_bhyve_args(idx):
     busid = args.busid_start
@@ -186,6 +217,19 @@ def main():
         action='append',
         help='Virtual-to-host cpu pin', metavar='V:H', default=['0:0'])
 
+    parser.add_argument('--loader',
+        help='Loader program', metavar='PATH')
+
+    parser.add_argument('--loader-console',
+        help='Loader console device', metavar='PATH')
+
+    parser.add_argument('--loader-image',
+        help='Loader disk image device', metavar='PATH')
+
+    parser.add_argument('--loader-env',
+        action='append',
+        help='Loader environment', metavar='NAME=VALUE')
+
     parser.add_argument('--status',
         action='store_true',
         help='Print status and exit')
@@ -205,7 +249,9 @@ def main():
     args = parser.parse_args()
     assert (args.busid_start > 0)
 
-    if args.pass_through_output and not args.status:
+    if args.pass_through_output \
+            and not args.status \
+            or args.loader_image:
         _run_command = _run_command_pass_through
     else:
         _run_command = _run_command_capture
@@ -230,8 +276,14 @@ def main():
         print "Destroyed", args.name
         return
 
+
     i = 0
     while True:
+        if args.loader_image:
+            bhyveload_args = build_bhyveload_args()
+            rc = vm_load(*bhyveload_args)
+            print 'bhyveload returned with %d, continuing ...' % rc
+
         bhyve_args = build_bhyve_args(i)
         try:
             rc = vm_run(*bhyve_args)

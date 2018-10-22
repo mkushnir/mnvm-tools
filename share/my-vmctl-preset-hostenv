@@ -8,6 +8,7 @@ then
     MNVMCTL_CFG=/data0/mkushnir/vm/diskdev
     MNVMCTL_DISK=/data0/mkushnir/vm/diskdev
     MNVMCTL_HOSTNAME=localhost
+    MNVMCTL_OUTPUT=uefi
     mnvm_net=10.1.2
 elif test "$MNVMCTL_HOSTENV" = "skyrta"
 then
@@ -18,6 +19,7 @@ then
     MNVMCTL_CFG=/$MNVMCTL_POOL/vm/cfg
     MNVMCTL_DISK=/dev/zvol/$MNVMCTL_POOL
     #MNVMCTL_HOSTNAME=localhost
+    MNVMCTL_OUTPUT=uefi
     mnvm_net=10.1.3
 else
     echo MNVMCTL_HOSTENV is not set

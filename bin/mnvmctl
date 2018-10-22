@@ -8,8 +8,10 @@ usage() {
     echo "    setup [altroot]"
     echo "    teardown [altroot]"
     echo
+    echo "    install-console distro disk[:disk] mac cdev hostname vmname"
     echo "    install-uefi distro disk[:disk] mac cdev hostname vmname"
     echo
+    echo "    run-console disk[:disk] mac cdev hostname vmname"
     echo "    run-uefi disk[:disk] mac cdev hostname vmname"
     echo
     echo "    list"
@@ -93,6 +95,14 @@ prog_required () {
         eval "/usr/bin/which \"$i\" >/dev/null 2>&1" || ( echo missing $i && false )
     done
     eval $_old_e
+}
+
+
+_slice() {
+    local _s _i
+    _i=$1
+    _s=$2
+    echo "$_s" | awk -F'|' "{print \$${_i};}"
 }
 
 
@@ -278,6 +288,21 @@ _pick_tap() {
 }
 
 
+_pick_nmdm() {
+    local i _cdev
+    i=0
+    while true
+    do
+        _cdev="/dev/nmdm${i}A"
+        if ! test -c ${_cdev}
+        then
+            echo ${_cdev}
+        fi
+        i=$(( $i + 1 ))
+    done
+}
+
+
 _destroy_tap() {
     local _tap
     _tap=$1
@@ -331,6 +356,48 @@ _install_uefi() {
 }
 
 
+_install_console() {
+    local _disk _boot _distro _vmname _answer _tap _mac _cdev _nmdm
+
+    _distro=$1
+    _disk=$2
+    _mac=$3
+    _cdev=$4
+    _hostname=$5
+    _vmname=$6
+
+    var_required _distro _disk _mac _cdev _vmname
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    _tap=`_pick_tap`
+    #_nmdm=`_pick_nmdm`
+    _nmdm="/dev/nmdm${_cdev}A"
+    _boot="`_slice 1 ${_distro}`"
+    echo "distro: ${_distro}"
+    echo "disk: ${_disk}"
+    echo "boot: ${_boot}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "nmdm: ${_nmdm}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _distropt="`_split --cdrom ${_distro}`"
+        local _diskopt="`_split --disk ${_disk} ${disk_emul}`"
+        mnbhyve_opts="${mnbhyve_opts} --lpc COM1,${_nmdm} --loader-console ${_nmdm} --loader-image ${_boot}"
+        _do_it "mnbhyve $mnbhyve_opts ${_distropt} ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
 _run_uefi() {
     local _disk _mac _cdev _hostname _fbuf _vmname _answer _tap _bootrom
 
@@ -364,6 +431,45 @@ _run_uefi() {
         mnbhyve_opts="${mnbhyve_opts} --lpc bootrom,${_bootrom}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,29:0,fbuf,${_fbuf}"
         mnbhyve_opts="${mnbhyve_opts} --extra s,30:0,xhci,tablet"
+        _do_it "mnbhyve $mnbhyve_opts ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
+    else
+        echo "Exiting ..."
+    fi
+}
+
+
+_run_console() {
+    local _disk _boot _mac _cdev _vmname _answer _tap _nmdm
+
+    _disk=$1
+    _mac=$2
+    _cdev=$3
+    _hostname=$4
+    _vmname=$5
+
+    var_required _disk _mac _cdev _vmname
+
+    if ls /dev/vmm/${_vmname} 2>/dev/null
+    then
+        echo "${_vmname} is in use"
+        exit 1
+    fi
+
+    _tap=`_pick_tap`
+    #_nmdm=`_pick_nmdm`
+    _nmdm="/dev/nmdm${_cdev}A"
+    _boot="`_slice 1 ${_disk}`"
+    echo "disk: ${_disk}"
+    echo "boot: ${_boot}"
+    echo "tap: ${_tap}"
+    echo "mac: ${_mac}"
+    echo "nmdm: ${_nmdm}"
+    echo "vmname: ${_vmname}"
+    read -p "Continue? [y/N]> " _answer
+    if test "${_answer}" = "y"
+    then
+        local _diskopt="`_split --disk ${_disk} ${disk_emul}`"
+        mnbhyve_opts="${mnbhyve_opts} --lpc COM1,${_nmdm} --loader-console ${_nmdm} --loader-image ${_boot}"
         _do_it "mnbhyve $mnbhyve_opts ${_diskopt} --net 'virtio-net,${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
@@ -616,6 +722,11 @@ elif test "$1" = "stop-iface"
 then
     _stop_ifaces
 
+elif test "$1" = "install-console"
+then
+    shift
+    _install_console $1 $2 $3 $4 $5 $6
+
 elif test "$1" = "install-uefi"
 then
     shift
@@ -654,6 +765,11 @@ then
 elif test "$1" = "destroy-image"
 then
     _destroy_image $2
+
+elif test "$1" = "run-console"
+then
+    shift
+    _run_console $1 $2 $3 $4 $5
 
 elif test "$1" = "run-uefi"
 then

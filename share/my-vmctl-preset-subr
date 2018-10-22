@@ -348,17 +348,36 @@ run_simple_freebsd_preset () {
 
     mnvmctl -f destroy $mnvm_name
     sleep 1
+
     if test "$1" = "install"
     then
         var_required mnvm_iso
-        _cmd=install-uefi
+        var_required MNVMCTL_OUTPUT
+        if test $MNVMCTL_OUTPUT = 'console'
+        then
+            _cmd=install-console
+        elif test $MNVMCTL_OUTPUT = 'uefi'
+        then
+            _cmd=install-uefi
+        else
+            _cmd=fake
+        fi
         _ddev=`newvol $mnvm_disk $mnvm_size`
         mnvm_iso="$MNVMCTL_ISO/$mnvm_iso"
         file_required $mnvm_iso
 
     elif test "$1" = "run"
     then
-        _cmd=run-uefi
+        var_required MNVMCTL_OUTPUT
+        if test $MNVMCTL_OUTPUT = 'console'
+        then
+            _cmd=run-console
+        elif test $MNVMCTL_OUTPUT = 'uefi'
+        then
+            _cmd=run-uefi
+        else
+            _cmd=fake
+        fi
         _ddev=`getvol $mnvm_disk`
         mnvm_iso=
 
@@ -385,7 +404,7 @@ run_simple_freebsd_preset () {
 
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
-    mnvmctl -M1 $B_opt $_cmd "$mnvm_iso" "$_ddev" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
+    mnvmctl -M1 -E A $B_opt $_cmd "$mnvm_iso" "$_ddev" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
 
@@ -399,7 +418,16 @@ run_simple_linux_preset () {
         local _mnvm_iso
 
         var_required mnvm_iso
-        _cmd=install-uefi
+        var_required MNVMCTL_OUTPUT
+        if test $MNVMCTL_OUTPUT = 'console'
+        then
+            _cmd=install-console
+        elif test $MNVMCTL_OUTPUT = 'uefi'
+        then
+            _cmd=install-uefi
+        else
+            _cmd=fake
+        fi
         _ddev=`newvol $mnvm_disk $mnvm_size`
         _mnvm_iso="$MNVMCTL_ISO/$mnvm_iso"
         file_required ${_mnvm_iso}
@@ -408,7 +436,16 @@ run_simple_linux_preset () {
 
     elif test "$1" = "run"
     then
-        _cmd=run-uefi
+        var_required MNVMCTL_OUTPUT
+        if test $MNVMCTL_OUTPUT = 'console'
+        then
+            _cmd=run-console
+        elif test $MNVMCTL_OUTPUT = 'uefi'
+        then
+            _cmd=run-uefi
+        else
+            _cmd=fake
+        fi
         _ddev=`getvol $mnvm_disk`
         mnvm_iso=
 
