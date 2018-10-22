@@ -366,8 +366,9 @@ _install_linux() {
         then
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
+        mybhyve_opts="${mybhyve_opts} -D ${_grubdev} -g ${_grubdir} -L ${_devmap}"
         local _diskopt="`_split $disk_switch ${_disk}`"
-        _do_it "my-bhyve $mybhyve_opts  -D ${_grubdev} -g ${_grubdir} -L ${_devmap} -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
+        _do_it "my-bhyve $mybhyve_opts -I ${_distro} ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi
@@ -583,8 +584,9 @@ _run_linux() {
             mybhyve_opts="${mybhyve_opts} -G ${_grubconf}"
         fi
         mybhyve_opts="$mybhyve_opts -c $cdev"
+        mybhyve_opts="$mybhyve_opts -D hd0,msdos1 -L ${_devmap}"
         local _diskopt="`_split $disk_switch ${_disk}`"
-        _do_it "my-bhyve $mybhyve_opts -N '${_tap},mac=${_mac}' -D hd0,msdos1 -L ${_devmap} ${_diskopt} ${_vmname}"
+        _do_it "my-bhyve $mybhyve_opts ${_diskopt} -N '${_tap},mac=${_mac}' ${_vmname}"
     else
         echo "Exiting ..."
     fi

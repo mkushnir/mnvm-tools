@@ -1,7 +1,7 @@
 #!/bin/sh
 
-MNVMCTL_HOSTENV=skyrta
-#MNVMCTL_HOSTENV=big
+#MNVMCTL_HOSTENV=skyrta
+MNVMCTL_HOSTENV=big
 . ./my-vmctl-preset-hostenv
 
 MNVMCTL_PLATENV=ubuntu-18

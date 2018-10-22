@@ -346,9 +346,6 @@ EOD
 run_simple_freebsd_preset () {
     local _cmd _ddev _hostaddr
 
-    mnvmctl -f destroy $mnvm_name
-    sleep 1
-
     if test "$1" = "install"
     then
         var_required mnvm_iso
@@ -404,6 +401,10 @@ run_simple_freebsd_preset () {
 
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
+
+    mnvmctl -f destroy $mnvm_name
+    sleep 1
+
     mnvmctl -M1 -E A $B_opt $_cmd "$mnvm_iso" "$_ddev" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
@@ -411,8 +412,6 @@ run_simple_freebsd_preset () {
 run_simple_linux_preset () {
     local _cmd _ddev _cdisk _hostaddr
 
-    mnvmctl -f destroy $mnvm_name
-    sleep 1
     if test "$1" = "install"
     then
         local _mnvm_iso
@@ -475,6 +474,10 @@ run_simple_linux_preset () {
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
+
+    mnvmctl -f destroy $mnvm_name
+    sleep 1
+
     mnvmctl -M1 $B_opt $_cmd "$mnvm_iso" "$_ddev|${_cdisk}" $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
@@ -482,8 +485,6 @@ run_simple_linux_preset () {
 run_simple_windows_preset () {
     local _cmd _ddev _hostaddr
 
-    mnvmctl -f destroy $mnvm_name
-    sleep 1
     if test "$1" = "install"
     then
         local _mnvm_iso
@@ -509,6 +510,10 @@ run_simple_windows_preset () {
     #export DEBUG=yes
     _hostaddr=`my_hostaddr`
     var_required _hostaddr
+
+    mnvmctl -f destroy $mnvm_name
+    sleep 1
+
     mnvmctl -M1 $B_opt $_cmd "$mnvm_iso" $_ddev $mnvm_mac $mnvm_cdev $_hostaddr $mnvm_name
 }
 
