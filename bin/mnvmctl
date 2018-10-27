@@ -477,6 +477,56 @@ _run_console() {
 }
 
 
+_runalt() {
+    local _rootmount _disk _tap _bootrom _mac _boottype _ctype _cdev _fbuf _vmname _answer
+
+    _boottype=console
+    if test -n "$MNVMCTL_BOOTTYPE"
+    then
+        _boottype=$MNVMCTL_BOOTTYPE
+    fi
+    _mac=$1
+
+    var_required _mac
+
+    _vmname=altroot
+
+    if ! ifconfig -l | grep -E -q 'bridge0'
+    then
+        echo "interfaces are not st up"
+        exit 1
+    fi
+    if mount -p | awk '{print $2;}' | grep -q ${_vmname}
+    then
+        echo "Please umount all ${_vmname} systems"
+        exit 1
+    fi
+
+    _rootmount="`mount -p | awk '{print $1, $2;}' | grep '/$' | awk '{print $1;}'`"
+    var_required _rootmount
+    if test "$_rootmount" = "/dev/gpt/root-wd1000"
+    then
+        # we are wd1000, so boot from wd1001
+        _disk=/dev/ada1
+    elif test "$_rootmount" = "/dev/gpt/root-wd1001"
+    then
+        # we are wd1001, so boot from wd1000
+        _disk=/dev/ada0
+    else
+        echo "Failed to find ${_vmname} mount device"
+        exit 1
+    fi
+
+    mnbhyve_opts="${mnbhyve_opts} --extra A"
+    if test "$_boottype" = "uefi"
+    then
+        _run_uefi "/boot/boot1.efifat|${_disk}" ${_mac} 0 localhost ${_vmname}
+    else
+        _run_console "${_disk}" ${_mac} 0 localhost ${_vmname}
+    fi
+}
+
+
 _poweroff() {
     if test -n "$1" && ls /dev/vmm | grep -F -w -q "$1"
     then
@@ -665,7 +715,7 @@ mnbhyve_opts='--busid-start 3'
 disk_emul=ahci-hd
 force=
 
-args=`getopt bE:fm:M:n $*`
+args=`getopt bE:fm:M:nv $*`
 if test $? -ne 0
 then
     exit 1
@@ -706,6 +756,11 @@ do
             shift
             dryrun=1
             mnbhyve_opts="$mnbhyve_opts --dryrun"
+        ;;
+
+        -v)
+            shift
+            mnbhyve_opts="$mnbhyve_opts --verbose"
         ;;
 
         --)
@@ -778,6 +833,10 @@ elif test "$1" = "run-uefi"
 then
     shift
     _run_uefi $1 $2 $3 $4 $5
+
+elif test "$1" = "runalt"
+then
+    _runalt 58:9c:fc:00:00:96
 
 elif test "$1" = "poweroffalt"
 then

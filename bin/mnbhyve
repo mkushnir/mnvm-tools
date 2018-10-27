@@ -19,14 +19,16 @@ def _dryrun_command(*a):
 
 
 def _run_command_capture(*a):
-    #print "Running:", ' '.join(a)
+    if args.verbose:
+        print "Running:", ' '.join(a)
     p = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _stdout, _stderr = p.communicate()
     return p, _stdout.strip()
 
 
 def _run_command_pass_through(*a):
-    #print "Running:", ' '.join(a)
+    if args.verbose:
+        print "Running:", ' '.join(a)
     p = subprocess.Popen(a)
     p.communicate()
     return p, ''
@@ -178,6 +180,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dryrun',
         action='store_true', help='Do not actually run commands')
+    parser.add_argument('--verbose',
+        action='store_true', help='Print out commands')
     parser.add_argument('--pass-through-output',
         action='store_true', default=False,
         help='Pipe output through.  Default is to capture.')
