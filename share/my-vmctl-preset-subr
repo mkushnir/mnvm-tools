@@ -334,6 +334,12 @@ DNS1=$_ip4ns
 ONBOOT=yes
 EOD
 
+    cat <<EOD >/mnt/notes
+Ubuntu initial setup:
+# crontab -e
+@reboot /usr/sbin/netplan apply
+@reboot /bin/hostname -F /etc/hostname
+EOD
     echo ${_hostname} > /mnt/etc/hostname
     echo "HOSTANME=${_hostname}" > /mnt/etc/sysconfig/network
 
