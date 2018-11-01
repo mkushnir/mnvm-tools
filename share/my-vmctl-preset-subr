@@ -3,6 +3,7 @@
 usage () {
     echo "Usage: `basename $0` [ install | run | base | configure ] IDX"
     echo "Usage: `basename $0` clone IDX TEMPLATE"
+    echo "Usage: `basename $0` [ list-images | list ]"
 }
 
 
@@ -400,6 +401,16 @@ run_simple_freebsd_preset () {
         configure_freebsd
         return $?
 
+    elif test "$1" = "list-images"
+    then
+        mnvmctl list-images
+        return $?
+
+    elif test "$1" = "list"
+    then
+        mnvmctl list
+        return $?
+
     else
         usage
         return 1
@@ -470,6 +481,16 @@ run_simple_linux_preset () {
         configure_linux
         return $?
 
+    elif test "$1" = "list-images"
+    then
+        mnvmctl list-images
+        return $?
+
+    elif test "$1" = "list"
+    then
+        mnvmctl list
+        return $?
+
     else
         usage
         return 1
@@ -507,6 +528,16 @@ run_simple_windows_preset () {
         _cmd=run-windows
         _ddev=`getvol $mnvm_disk`
         mnvm_iso=/dev/null
+
+    elif test "$1" = "list-images"
+    then
+        mnvmctl list-images
+        return $?
+
+    elif test "$1" = "list"
+    then
+        mnvmctl list
+        return $?
 
     else
         usage

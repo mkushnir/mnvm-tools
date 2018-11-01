@@ -2,22 +2,24 @@
 
 if test "$MNVMCTL_HOSTENV" = "big"
 then
-    #MNVMCTL_DDEV_ZFS=
-    #MNVMCTL_DDEV_ZFS=
+    MNVMCTL_DDEV_UFS=1
+    export MNVMCTL_DDEV_UFS
     MNVMCTL_ISO=/data0/mkushnir/vm/iso
     MNVMCTL_CFG=/data0/mkushnir/vm/diskdev
     MNVMCTL_DISK=/data0/mkushnir/vm/diskdev
+    export MNVMCTL_DISK
     MNVMCTL_HOSTNAME=localhost
     MNVMCTL_OUTPUT=uefi
     mnvm_net=10.1.2
 elif test "$MNVMCTL_HOSTENV" = "skyrta"
 then
     MNVMCTL_DDEV_ZFS=1
-    MNVMCTL_DDEV_ZFS=1
+    export MNVMCTL_DDEV_ZFS
     MNVMCTL_POOL=skyrta
     MNVMCTL_ISO=/$MNVMCTL_POOL/vm/iso
     MNVMCTL_CFG=/$MNVMCTL_POOL/vm/cfg
     MNVMCTL_DISK=/dev/zvol/$MNVMCTL_POOL
+    export MNVMCTL_DISK
     #MNVMCTL_HOSTNAME=localhost
     MNVMCTL_OUTPUT=uefi
     mnvm_net=10.1.3

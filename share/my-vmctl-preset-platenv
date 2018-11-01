@@ -13,7 +13,8 @@ then
     mnvm_tag=ubuntu-18
     #mnvm_iso=ubuntu-18.04-desktop-amd64.iso
     #mnvm_iso=ubuntu-18.04-server-amd64.iso
-    mnvm_iso=ubuntu-18.04-live-server-amd64.iso
+    #mnvm_iso=ubuntu-18.04-live-server-amd64.iso
+    mnvm_iso=ubuntu-18.10-live-server-amd64.iso
     mnvm_simple_preset=run_simple_linux_preset
 
 elif test "$MNVMCTL_PLATENV" = "centos-7"
