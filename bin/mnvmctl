@@ -517,7 +517,7 @@ _runalt() {
         exit 1
     fi
 
-    mnbhyve_opts="${mnbhyve_opts} --extra A --ncpu 4"
+    mnbhyve_opts="${mnbhyve_opts} --extra A --ncpu 4 --memory 4g"
     if test "$_boottype" = "uefi"
     then
         _run_uefi "/boot/boot1.efifat|${_disk}" ${_mac} 0 localhost ${_vmname}
