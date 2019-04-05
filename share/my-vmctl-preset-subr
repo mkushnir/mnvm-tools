@@ -235,7 +235,7 @@ configure_linux () {
     local _passwd _cdisk _mdev
     local _ifname _ip4 _ip4mask _ip4net _ip4bcast _ip4gway _ip4ns _hostname
 
-    var_required mnvm_net mnvm_node_id
+    var_required mnhnet mnvm_net mnvm_node_id
 
     _ifname=enp0s1
     _ifnameg='enp0s*'
@@ -245,7 +245,7 @@ configure_linux () {
     _ip4net=${mnvm_net}.0
     _ip4bcast=${mnvm_net}.255
     _ip4gway=${mnvm_net}.10
-    _ip4ns=10.1.1.10
+    _ip4ns=${mnhnet}.1.10
     _hostname=`host $_ip4 | sed -n -e 's/.*domain name pointer \(.*\)\./\1/p'`
     var_required _hostname
 
@@ -340,6 +340,8 @@ Ubuntu initial setup:
 # crontab -e
 @reboot /usr/sbin/netplan apply
 @reboot /bin/hostname -F /etc/hostname
+
+Arch TODO.
 EOD
     echo ${_hostname} > /mnt/etc/hostname
     echo "HOSTANME=${_hostname}" > /mnt/etc/sysconfig/network

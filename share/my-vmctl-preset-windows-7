@@ -1,5 +1,6 @@
 #!/bin/sh
 
+mnhnet=`mnhnet`
 #MNVMCTL_HOSTENV=skyrta
 MNVMCTL_HOSTENV=big
 . ./my-vmctl-preset-hostenv

@@ -1,10 +1,11 @@
 #!/bin/sh
 
+mnhnet=`mnhnet`
 #big
 #MNVMCTL_DDEV_UFS=1
-#mnvm_net=10.1.2
+#mnvm_net=${mnhnet}.2
 #skyrta
-mnvm_net=10.1.3
+mnvm_net=${mnhnet}.3
 
 #set -x
 idx=$2

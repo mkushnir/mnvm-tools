@@ -5,8 +5,9 @@ mnhnet=`mnhnet`
 MNVMCTL_HOSTENV=big
 . ./my-vmctl-preset-hostenv
 
-MNVMCTL_PLATENV=freebsd-11
+MNVMCTL_PLATENV=archlinux
 . ./my-vmctl-preset-platenv
 
+mnvm_size=64G
 . ./my-vmctl-preset-subr
 eval $mnvm_simple_preset $*

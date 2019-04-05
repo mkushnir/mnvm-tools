@@ -26,6 +26,13 @@ then
     mnvm_iso=CentOS-7-x86_64-Everything-1804.iso
     mnvm_simple_preset=run_simple_linux_preset
 
+elif test "$MNVMCTL_PLATENV" = "archlinux"
+then
+    mnvm_idx_offset=48
+    mnvm_tag=archlinux
+    mnvm_iso=archlinux-2019.04.01-x86_64.iso
+    mnvm_simple_preset=run_simple_linux_preset
+
 elif test "$MNVMCTL_PLATENV" = "windows-7"
 then
     mnvm_idx_offset=48

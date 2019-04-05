@@ -10,7 +10,7 @@ then
     export MNVMCTL_DISK
     MNVMCTL_HOSTNAME=localhost
     MNVMCTL_OUTPUT=uefi
-    mnvm_net=10.1.2
+    mnvm_net=${mnhnet}.2
 elif test "$MNVMCTL_HOSTENV" = "skyrta"
 then
     MNVMCTL_DDEV_ZFS=1
@@ -22,7 +22,7 @@ then
     export MNVMCTL_DISK
     #MNVMCTL_HOSTNAME=localhost
     MNVMCTL_OUTPUT=uefi
-    mnvm_net=10.1.3
+    mnvm_net=${mnhnet}.3
 else
     echo MNVMCTL_HOSTENV is not set
     exit 1;
