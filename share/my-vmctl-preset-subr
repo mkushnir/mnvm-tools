@@ -237,7 +237,7 @@ configure_linux () {
 
     var_required mnhnet mnvm_net mnvm_node_id
 
-    _ifname=enp0s1
+    _ifname=enp0s5
     _ifnameg='enp0s*'
     _ip4=${mnvm_net}.${mnvm_node_id}
     _ip4netlen=24
@@ -276,7 +276,14 @@ configure_linux () {
         mount -t ext2fs /dev/${_mdev} /mnt
     fi
 
-    mkdir -p /mnt/etc/network/ /mnt/etc/netplan/ /mnt/etc/sysconfig/network-scripts
+    mkdir -p \
+        /mnt/etc/network \
+        /mnt/etc/netplan \
+        /mnt/etc/sysconfig/network-scripts \
+        /mnt/etc/netctl \
+        /mnt/etc/pacman.d
+
+    # ubuntu
     cat <<EOD >/mnt/etc/network/interfaces
 source /etc/network/interfaces.d/*
 auto lo
@@ -312,6 +319,7 @@ network:
                     - $_ip4ns
 EOD
 
+    # centos
     cat <<EOD >/mnt/etc/sysconfig/network-scripts/ifcfg-eth0
 TYPE=Ethernet
 PROXY_METHOD=none
@@ -335,13 +343,37 @@ DNS1=$_ip4ns
 ONBOOT=yes
 EOD
 
+    # arch
+    cat <<EOD >/mnt/etc/pacman.d/mirrorlist
+Server = http://archlinux.ip-connect.vn.ua/\$repo/os/\$arch
+Server = http://mirrors.nix.org.ua/linux/archlinux/\$repo/os/\$arch
+EOD
+
+    cat <<EOD >/mnt/etc/netctl/ether
+Description='Mn ethernet connection'
+Interface=$_ifname
+Connection=ethernet
+IP=static
+Address=('$_ip4/$_ip4netlen')
+Gateway='$_ip4gway'
+DNS=('$_ip4ns')
+EOD
+
+    d="`dirname $0`"
+    d="`cd $d && pwd -P`"
+    file_required "$d/my-vmctl-setup-arch"
+    cp "$d/my-vmctl-setup-arch" /mnt/
+
     cat <<EOD >/mnt/notes
 Ubuntu initial setup:
 # crontab -e
 @reboot /usr/sbin/netplan apply
 @reboot /bin/hostname -F /etc/hostname
 
-Arch TODO.
+Arch initial setup:
+
+scp mkushnir@big-1:development/mnvm-tools/share/my-vmctl-setup-arch .
+./my-vmctl-setup-arch 1
 EOD
     echo ${_hostname} > /mnt/etc/hostname
     echo "HOSTANME=${_hostname}" > /mnt/etc/sysconfig/network
