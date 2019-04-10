@@ -7,6 +7,13 @@ then
     mnvm_iso=FreeBSD-11.2-RELEASE-amd64-bootonly.iso
     mnvm_simple_preset=run_simple_freebsd_preset
 
+elif test "$MNVMCTL_PLATENV" = "freebsd-12"
+then
+    mnvm_idx_offset=0
+    mnvm_tag=freebsd-12
+    mnvm_iso=FreeBSD-12.0-RELEASE-amd64-bootonly.iso
+    mnvm_simple_preset=run_simple_freebsd_preset
+
 elif test "$MNVMCTL_PLATENV" = "ubuntu-18"
 then
     mnvm_idx_offset=16
@@ -35,7 +42,7 @@ then
 
 elif test "$MNVMCTL_PLATENV" = "windows-7"
 then
-    mnvm_idx_offset=48
+    mnvm_idx_offset=64
     mnvm_tag=windows-7
     #mnvm_iso=en_windows_7_professional_x64_dvd.iso
     #mnvm_iso=pcriver.com_win_7_64bit_ult.iso
@@ -44,7 +51,7 @@ then
 
 elif test "$MNVMCTL_PLATENV" = "windows-10"
 then
-    mnvm_idx_offset=48
+    mnvm_idx_offset=64
     mnvm_tag=windows-10
     mnvm_iso=Win10_1803_Ukrainian_x64-remastered.iso
     mnvm_simple_preset=run_simple_windows_preset
