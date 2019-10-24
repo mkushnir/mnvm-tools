@@ -208,11 +208,12 @@ _checkfstat() {
 
 _start_ifaces() {
     local i _tap
-    for i in if_tap vmm nmdm fuse ext2fs
+
+    for i in if_tuntap vmm nmdm ext2fs
     do
         if ! kldstat -q -m $i
         then
-            kldload $i
+            kldload $i || true
         fi
     done
     sysctl net.link.tap.user_open=1
@@ -236,8 +237,8 @@ _stop_ifaces() {
     sysctl net.link.tap.user_open=0
     sysctl net.link.tap.up_on_open=0
 
-    #vmm fuse ext2fs
-    for i in if_tap nmdm
+    #vmm fuse ext2fs if_tuntap
+    for i in nmdm
     do
         if kldstat -q -m $i
         then

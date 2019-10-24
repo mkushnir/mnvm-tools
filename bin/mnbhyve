@@ -15,12 +15,12 @@ _run_command = None
 
 
 def _dryrun_command(*a):
-    print "Running:", ' '.join(a)
+    print("Running:", ' '.join(a))
 
 
 def _run_command_capture(*a):
     if args.verbose:
-        print "Running:", ' '.join(a)
+        print("Running:", ' '.join(a))
     p = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _stdout, _stderr = p.communicate()
     return p, _stdout.strip()
@@ -28,7 +28,7 @@ def _run_command_capture(*a):
 
 def _run_command_pass_through(*a):
     if args.verbose:
-        print "Running:", ' '.join(a)
+        print("Running:", ' '.join(a))
     p = subprocess.Popen(a)
     p.communicate()
     return p, ''
@@ -67,6 +67,7 @@ re_exited = re.compile(r'^.*\s0x1e$')
 re_unknown = re.compile(r'^.*\s(\S+)$')
 def vm_status(name):
     p, out = _run_command(bhyvectl, '--vm=%s' % name, '--get-exit-reason')
+    out = out.decode('utf-8')
     if re_inout.match(out):
         return 'inout'
     elif re_vmx.match(out):
@@ -262,22 +263,22 @@ def main():
 
     if args.status:
         status = vm_status(args.name)
-        print status
+        print(status)
         return
 
     if args.reset:
         vm_reset(args.name)
-        print "Reset", args.name
+        print("Reset", args.name)
         return
 
     if args.poweroff:
         vm_poweroff(args.name)
-        print "Powered off", args.name
+        print("Powered off", args.name)
         return
 
     if args.destroy:
         vm_destroy(args.name)
-        print "Destroyed", args.name
+        print("Destroyed", args.name)
         return
 
 
@@ -286,7 +287,7 @@ def main():
         if args.loader_image:
             bhyveload_args = build_bhyveload_args()
             rc = vm_load(*bhyveload_args)
-            print 'bhyveload returned with %d, continuing ...' % rc
+            print('bhyveload returned with %d, continuing ...' % rc)
 
         bhyve_args = build_bhyve_args(i)
         try:
@@ -296,10 +297,10 @@ def main():
             raise
 
         if rc == 0:
-            print 're-starting %s ...' % args.name
+            print('re-starting %s ...' % args.name)
             time.sleep(2)
         else:
-            print 'bhyve returned with %d, exiting ...' % rc
+            print('bhyve returned with %d, exiting ...' % rc)
             break
         i += 1
 
@@ -308,4 +309,4 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print "Exiting ..."
+        print("Exiting ...")
