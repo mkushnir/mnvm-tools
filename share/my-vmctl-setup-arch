@@ -2,23 +2,62 @@
 set -x
 set -e
 
+
+# 64G
+#label: gpt
+#label-id: 2156F372-028E-0B40-87D4-911BE15179A5
+#device: /dev/sda
+#unit: sectors
+#first-lba: 2048
+#last-lba: 134217694
+#
+#/dev/sda1 : start=        2048, size=     1048576, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=6B593094-A4A3-2E4D-AD1C-A73A3DDECAFE
+#/dev/sda2 : start=     1050624, size=   131069952, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=56F9E952-159B-8F48-81CD-20D1D1D4C070
+#/dev/sda3 : start=   132120576, size=     2097119, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=8102F535-D26A-4D4B-8EEE-E458B2074BB6
+
+# 32G
+#label: gpt
+#label-id: 2156F372-028E-0B40-87D4-911BE15179A5
+#device: /dev/sda
+#unit: sectors
+#first-lba: 2048
+#last-lba: 67108830
+#
+#/dev/sda1 : start=        2048, size=     1048576, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=6B593094-A4A3-2E4D-AD1C-A73A3DDECAFE
+#/dev/sda2 : start=     1050624, size=    65011712, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=56F9E952-159B-8F48-81CD-20D1D1D4C070
+#/dev/sda3 : start=    66062336, size=     1046495, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=8102F535-D26A-4D4B-8EEE-E458B2074BB6
+
+
+# This is a recursive script, call it from the shell:
+#   $ ./my-vmctl-setup-arch 1
+#
+# Then it will call itself with 2, 3, etc.
+#
+# Two storage devices:
+#   - /dev/sda is the "main" disk, must have size as in "truncate -s 32G /path/to/sda":
+#       - sda1 efi,
+#       - sda2 system,
+#       - sda3 swap
+#   - /dev/sdb is a "config" disk, housing predefined OS configuration, mostly /etc/
+
 if test "$1" = 1
 then
     timedatectl set-local-rtc true
     timedatectl set-ntp true
     timedatectl status
 
+    # 32G /dev/sda hardcoded
     sfdisk /dev/sda <<EOD
 label: gpt
 label-id: 2156F372-028E-0B40-87D4-911BE15179A5
 device: /dev/sda
 unit: sectors
 first-lba: 2048
-last-lba: 134217694
+last-lba: 67108830
 
 /dev/sda1 : start=        2048, size=     1048576, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=6B593094-A4A3-2E4D-AD1C-A73A3DDECAFE
-/dev/sda2 : start=     1050624, size=   131069952, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=56F9E952-159B-8F48-81CD-20D1D1D4C070
-/dev/sda3 : start=   132120576, size=     2097119, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=8102F535-D26A-4D4B-8EEE-E458B2074BB6
+/dev/sda2 : start=     1050624, size=    65011712, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=56F9E952-159B-8F48-81CD-20D1D1D4C070
+/dev/sda3 : start=    66062336, size=     1046495, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=8102F535-D26A-4D4B-8EEE-E458B2074BB6
 EOD
 
     mkfs.fat -F32 /dev/sda1
